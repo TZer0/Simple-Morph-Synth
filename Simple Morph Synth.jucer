@@ -16,9 +16,9 @@
             vstFolder="d:\SDKs\">
       <CONFIGURATIONS>
         <CONFIGURATION name="Debug" winWarningLevel="4" generateManifest="1" winArchitecture="32-bit"
-                       isDebug="1" optimisation="1" targetName="Simple Wavetable Synth"/>
+                       isDebug="1" optimisation="1" targetName="Simple Morph Synth"/>
         <CONFIGURATION name="Release" winWarningLevel="4" generateManifest="1" winArchitecture="32-bit"
-                       isDebug="0" optimisation="2" targetName="Simple Wavetable Synth"/>
+                       isDebug="0" optimisation="2" targetName="Simple Morph Synth"/>
       </CONFIGURATIONS>
     </VS2012>
   </EXPORTFORMATS>
