@@ -18,8 +18,10 @@ JuceDemoPluginAudioProcessorEditor::JuceDemoPluginAudioProcessorEditor (JuceDemo
       infoLabel (String::empty),
       gainLabel ("", "Throughput level:"),
       delayLabel ("", "Delay:"),
+	  sourceLabel("", "Source Selection:"),
       gainSlider ("gain"),
-      delaySlider ("delay")
+      delaySlider ("delay"),
+	  sourceSlider("Source")
 {
 	// add some sliders..
     addAndMakeVisible (&gainSlider);
@@ -32,12 +34,23 @@ JuceDemoPluginAudioProcessorEditor::JuceDemoPluginAudioProcessorEditor (JuceDemo
     delaySlider.addListener (this);
     delaySlider.setRange (0.0, 1.0, 0.01);
 
+	addAndMakeVisible(&sourceSlider);
+	sourceSlider.setSliderStyle(Slider::LinearVertical);
+	sourceSlider.addListener(this);
+	sourceSlider.setRange(0.0, 1.0, 0.01);
+	sourceSlider.setValue(0);
+	sourceSlider.repaint();
+
+
     // add some labels for the sliders..
     gainLabel.attachToComponent (&gainSlider, false);
     gainLabel.setFont (Font (11.0f));
 
     delayLabel.attachToComponent (&delaySlider, false);
     delayLabel.setFont (Font (11.0f));
+
+	sourceLabel.attachToComponent (&sourceSlider, false);
+    sourceLabel.setFont (Font (11.0f));
 
     // add the midi keyboard component..
     addAndMakeVisible (&midiKeyboard);
@@ -48,26 +61,26 @@ JuceDemoPluginAudioProcessorEditor::JuceDemoPluginAudioProcessorEditor (JuceDemo
 
     // add the triangular resizer component for the bottom-right of the UI
     addAndMakeVisible (resizer = new ResizableCornerComponent (this, &resizeLimits));
-    resizeLimits.setSizeLimits (600, 300, 600, 300);
+    resizeLimits.setSizeLimits (600, 610, 600, 610);
 
     // set our component's initial size to be the last one that was stored in the filter's settings
     setSize (ownerFilter->lastUIWidth,
              ownerFilter->lastUIHeight);
-	dragging = false;
+	waveClicked = -1;
     startTimer (50);
 }
 
 void JuceDemoPluginAudioProcessorEditor::mouseDown(const MouseEvent &event) {
-	dragging = true;
 	lastDrag = event.getPosition().toFloat();
+	waveClicked = checkIfInWavetable((int)lastDrag.getX(), (int)lastDrag.getY());
 }
 
 void JuceDemoPluginAudioProcessorEditor::mouseUp(const MouseEvent &) {
-	dragging = false;
+	waveClicked = -1;
 }
 
 void JuceDemoPluginAudioProcessorEditor::mouseDrag(const MouseEvent &event) {
-	if (!dragging) {
+	if (waveClicked == -1) {
 		return;
 	}
 	auto pos = event.getPosition().toFloat();
@@ -75,22 +88,30 @@ void JuceDemoPluginAudioProcessorEditor::mouseDrag(const MouseEvent &event) {
 	auto dragDistLeft = dragVec;
 	int i = 0;
 	while (dragDistLeft.getDistanceFromOrigin() > 0.2f && i < 10000) {
-		checkIfInWavetable((int)lastDrag.getX(), (int)-lastDrag.getY() + 150);
+		checkIfInWavetable((int)lastDrag.getX(), (int)lastDrag.getY(), waveClicked);
 		auto dPos = (dragVec/dragVec.getDistanceFromOrigin())*0.01f;
 		dragDistLeft -= dPos;
 		lastDrag += dPos;
 		i++;
 	}
 	lastDrag = pos;
-	checkIfInWavetable((int)lastDrag.getX(), (int)-lastDrag.getY() + 150);
+	checkIfInWavetable((int)lastDrag.getX(), (int)lastDrag.getY(), waveClicked );
+	repaint();
 }
 
-void JuceDemoPluginAudioProcessorEditor::checkIfInWavetable(int x, int y) {
+int JuceDemoPluginAudioProcessorEditor::checkIfInWavetable(int x, int y, int forceTable) {
 	x-=WAVESIZE;
 	if (x < WAVESIZE && x >= 0) {
-		getProcessor()->wave[x] = std::max(std::min(((float) y)/WAVEHEIGHT, 1.f), -1.f);
-		repaint();
+		for (int i = 0; i < 2; i++) {
+			if ((y < WAVEHEIGHT*2 && y >= 0 && forceTable == -1 )|| forceTable == i) {
+				getProcessor()->wave[x+i*WAVESIZE] = std::max(std::min(((float) -y+WAVEHEIGHT)/WAVEHEIGHT, 1.f), -1.f);
+				return i;
+			}
+			y -= ((int) WAVEHEIGHT * 2.f + TABLESPACING);
+		}
+		
 	}
+	return -1;
 }
 
 JuceDemoPluginAudioProcessorEditor::~JuceDemoPluginAudioProcessorEditor()
@@ -103,11 +124,13 @@ void JuceDemoPluginAudioProcessorEditor::paint (Graphics& g)
     g.setGradientFill (ColourGradient (Colours::white, 0, 0, Colours::grey, 0, (float) getHeight(), false));
 	g.fillAll();
 	g.setColour(Colours::black);
-    g.fillRect(300, 0, 300, 300);
+    g.fillRect(300, 0, WAVESIZE, (int) WAVEHEIGHT * 2);
+	g.fillRect(300, 310, WAVESIZE, (int) WAVEHEIGHT * 2);
 	g.setColour(Colours::white);
 	float *wave = getProcessor()->wave;
 	for (int i = 0 ; i < WAVESIZE; i++) {
-		g.fillRect(300.f+i, 150.f, 1.f, -wave[i]*WAVEHEIGHT);
+		g.fillRect(300.f+i, WAVEHEIGHT, 1.f, -wave[i]*WAVEHEIGHT);
+		g.fillRect(300.f+i, WAVEHEIGHT*3+TABLESPACING, 1.f, -wave[i+WAVESIZE]*WAVEHEIGHT);
 	}
     
 }
@@ -117,6 +140,7 @@ void JuceDemoPluginAudioProcessorEditor::resized()
     infoLabel.setBounds (10, 4, 400, 25);
     gainSlider.setBounds (20, 60, 150, 40);
     delaySlider.setBounds (150, 60, 150, 40);
+	sourceSlider.setBounds(50, 350, 20, 100);
 
     const int keyboardHeight = 70;
     midiKeyboard.setBounds (4, getHeight() - keyboardHeight - 4, (getWidth() - 8)/2, keyboardHeight);
@@ -158,6 +182,11 @@ void JuceDemoPluginAudioProcessorEditor::sliderValueChanged (Slider* slider)
         getProcessor()->setParameterNotifyingHost (JuceDemoPluginAudioProcessor::delayParam,
                                                    (float) delaySlider.getValue());
     }
+	else if (slider == &sourceSlider)
+	{
+		getProcessor()->setParameterNotifyingHost (JuceDemoPluginAudioProcessor::sourceParam,
+													(float) sourceSlider.getValue());
+	}
 }
 
 //==============================================================================
@@ -209,7 +238,7 @@ void JuceDemoPluginAudioProcessorEditor::displayPositionInfo (const AudioPlayHea
                 << pos.timeSigNumerator << '/' << pos.timeSigDenominator
                 << "  -  " << timeToTimecodeString (pos.timeInSeconds)
                 << "  -  " << ppqToBarsBeatsString (pos.ppqPosition, pos.ppqPositionOfLastBarStart,
-                                                    pos.timeSigNumerator, pos.timeSigDenominator);
+				pos.timeSigNumerator, pos.timeSigDenominator);
 
     if (pos.isRecording)
         displayText << "  (recording)";

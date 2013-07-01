@@ -14,7 +14,8 @@
 #include "../JuceLibraryCode/JuceHeader.h"
 
 #define WAVESIZE 300
-#define WAVEHEIGHT 150
+#define WAVEHEIGHT 150.f
+#define TABLESPACING 10.f
 
 
 //==============================================================================
@@ -90,17 +91,19 @@ public:
     {
         gainParam = 0,
         delayParam,
+		sourceParam,
 
         totalNumParams
     };
 
     float gain, delay;
-	float wave[WAVESIZE];
+	float wave[WAVESIZE*2];
 
 private:
     //==============================================================================
     AudioSampleBuffer delayBuffer;
     int delayPosition;
+	float sourceFactor;
 
     // the synth!
     Synthesiser synth;

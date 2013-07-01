@@ -37,13 +37,15 @@ public:
 
 private:
     MidiKeyboardComponent midiKeyboard;
-    Label infoLabel, gainLabel, delayLabel;
+    Label infoLabel, gainLabel, delayLabel, sourceLabel;
     Slider gainSlider;
     Slider delaySlider;
+	Slider sourceSlider;
 
+	int waveClicked;
 	juce::Point<float> lastDrag;
 	bool dragging;
-	void checkIfInWavetable(int x, int y);
+	int checkIfInWavetable(int x, int y, int forceTable = -1);
     ScopedPointer<ResizableCornerComponent> resizer;
     ComponentBoundsConstrainer resizeLimits;
 

@@ -30,11 +30,12 @@ public:
 class WaveTableVoice  : public SynthesiserVoice
 {
 public:
-	WaveTableVoice(float *inWave)
+	WaveTableVoice(float *inWave, float *fac)
 		: angleDelta (0.0),
 		tailOff (0.0)
 	{
 		wave = inWave;
+		sourceFac = fac;
 	}
 
 	bool canPlaySound (SynthesiserSound* sound)
@@ -87,6 +88,7 @@ public:
 
 	void renderNextBlock (AudioSampleBuffer& outputBuffer, int startSample, int numSamples)
 	{
+		float fac = *sourceFac;
 		if (angleDelta != 0.0)
 		{
 
@@ -95,7 +97,13 @@ public:
 				float pos = (float) currentAngle*WAVESIZE;
 				int curSampPos = (int) pos;
 				float posOffset = (float) pos-curSampPos;
-				float outVal = wave[curSampPos%300]*(1-posOffset) + wave[(curSampPos+1)%300]*posOffset;
+				float outVal = 0.f;
+				for (int i = 0; i < 2; i++) 
+				{
+					outVal += fac*(wave[curSampPos%WAVESIZE + i * WAVESIZE]*(1-posOffset) + wave[(curSampPos+1)%WAVESIZE + i * WAVESIZE]*posOffset);
+					fac = 1-fac;
+				}
+				
 				const float currentSample = (float) (outVal * level * (tailOff > 0 ? tailOff : 1));
 
 				for (int i = outputBuffer.getNumChannels(); --i >= 0;)
@@ -122,7 +130,7 @@ public:
 
 private:
 	double currentAngle, angleDelta, level, tailOff;
-	float *wave;
+	float *wave, *sourceFac;
 };
 
 
@@ -133,20 +141,22 @@ JuceDemoPluginAudioProcessor::JuceDemoPluginAudioProcessor()
 	// Set up some default values..
 	gain = 1.0f;
 	delay = 0.5f;
+	sourceFactor = 0;
 
 	lastUIWidth = 600;
-	lastUIHeight = 300;
+	lastUIHeight = 610;
 
 	lastPosInfo.resetToDefault();
 	delayPosition = 0;
 
 	// Initialise the synth...
 	for (int i = 4; --i >= 0;)
-		synth.addVoice (new WaveTableVoice(wave));   // These voices will play our custom sine-wave sounds..
+		synth.addVoice (new WaveTableVoice(wave, &sourceFactor));   // These voices will play our custom sine-wave sounds..
 
 	synth.addSound (new WaveTableSound());
 	for (int i = 0; i < WAVESIZE; i++) {
-		wave[i] = (float) (i-WAVESIZE/2)/WAVEHEIGHT;
+		wave[i] = (float) (WAVESIZE/2-i)/WAVEHEIGHT;
+		wave[i+WAVESIZE] = (float) sin((i*2*double_Pi)/WAVESIZE);
 	}
 }
 
@@ -169,6 +179,8 @@ float JuceDemoPluginAudioProcessor::getParameter (int index)
 	{
 	case gainParam:     return gain;
 	case delayParam:    return delay;
+	case sourceParam:    return sourceFactor;
+
 	default:            return 0.0f;
 	}
 }
@@ -182,6 +194,7 @@ void JuceDemoPluginAudioProcessor::setParameter (int index, float newValue)
 	{
 	case gainParam:     gain = newValue;  break;
 	case delayParam:    delay = newValue;  break;
+	case sourceParam:		sourceFactor = newValue; break;
 	default:            break;
 	}
 }
@@ -192,6 +205,8 @@ const String JuceDemoPluginAudioProcessor::getParameterName (int index)
 	{
 	case gainParam:     return "gain";
 	case delayParam:    return "delay";
+	case sourceParam:    return "source";
+
 	default:            break;
 	}
 
