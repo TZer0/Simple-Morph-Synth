@@ -13,9 +13,78 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 
-#define WAVESIZE 300
+#define WAVESIZE 400
 #define WAVEHEIGHT 150.f
 #define TABLESPACING 10.f
+enum Action
+{
+	SinFunc = 0,
+	CosFunc,
+	SawFunc,
+	SquareFunc,
+	Reverse,
+	Flip
+};
+
+class WaveTable
+{
+public:
+	WaveTable()
+	{
+		for (int i = 0; i < WAVESIZE; i++)
+		{
+			mWave[i] = 0;
+		}
+	}
+	void setWaveSection(int x, float y)
+	{
+		if (0 <= x && x < WAVESIZE)
+		{
+			mWave[x] = std::max(std::min(y, 1.f), -1.f);
+		}
+	}
+	void executeAction(Action ac)
+	{
+		if (ac == SinFunc)
+		{
+			for (int i = 0; i < WAVESIZE; i++) {
+				mWave[i] = (float) sin((i*2*double_Pi)/WAVESIZE);
+			}
+		} else if (ac == CosFunc) 
+		{
+			for (int i = 0; i < WAVESIZE; i++) {
+				mWave[i] = (float) cos((i*2*double_Pi)/WAVESIZE);
+			}
+		}  else if (ac == SawFunc)
+		{
+			for (int i = 0; i < WAVESIZE; i++)  {
+				mWave[i] = (float) (WAVESIZE/2-i)/(WAVESIZE/2);
+			}
+		} else if (ac == SquareFunc)
+		{
+			for (int i = 0; i < WAVESIZE; i++)
+			{
+				mWave[i] = (float) (i*2/WAVESIZE);
+			}
+		} else if (ac == Reverse)
+		{
+			for (int i = 0; i < WAVESIZE/2; i++)
+			{
+				float tmp = mWave[WAVESIZE-i-1];
+				mWave[WAVESIZE-i-1] = mWave[i];
+				mWave[i] = tmp;
+			}
+		} else if (ac == Flip)
+		{
+			for (int i = 0; i < WAVESIZE; i++)
+			{
+				mWave[i] = -mWave[i];
+			}
+		}
+	}
+
+	float mWave[WAVESIZE];
+};
 
 
 //==============================================================================
@@ -63,6 +132,11 @@ public:
     void setCurrentProgram (int /*index*/)                              { }
     const String getProgramName (int /*index*/)                         { return String::empty; }
     void changeProgramName (int /*index*/, const String& /*newName*/)   { }
+	void setWaveTableValue(size_t table, int pos, float value);
+	WaveTable *getWaveTable(size_t table);
+	size_t getNumTables() { return mWaveTables.size(); }
+
+	float getWaveTableValue(size_t table, int pos);
 
     //==============================================================================
     void getStateInformation (MemoryBlock& destData);
@@ -97,7 +171,7 @@ public:
     };
 
     float mGain, mDelay;
-	float mWave[WAVESIZE*2];
+	std::vector<WaveTable *> mWaveTables;
 	float mSourceFactor;
 
 private:

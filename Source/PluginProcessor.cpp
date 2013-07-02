@@ -25,16 +25,14 @@ public:
 	bool appliesToChannel (const int /*midiChannel*/)           { return true; }
 };
 
-//==============================================================================
-/** A simple demo synth voice that just plays a sine wave.. */
 class WaveTableVoice  : public SynthesiserVoice
 {
 public:
-	WaveTableVoice(SimpleMorphSynth *mSynth)
+	WaveTableVoice(SimpleMorphSynth *synth)
 		: mAngleDelta (0.0),
 		mTailOff (0.0)
 	{
-		mSynth = mSynth;
+		mSynth = synth;
 	}
 
 	bool canPlaySound (SynthesiserSound* sound)
@@ -97,16 +95,12 @@ public:
 				int curSampPos = (int) pos;
 				float posOffset = (float) pos-curSampPos;
 				float outVal = 0.f;
-				for (int i = 0; i < 2; i++)
+				for (size_t i = 0; i < mSynth->mWaveTables.size(); i++)
 				{
-					float from = mSynth->mWave[curSampPos%WAVESIZE + i * WAVESIZE];
-					float to = mSynth->mWave[(curSampPos+1)%WAVESIZE + i * WAVESIZE];
-					if (from > to) {
-						to += (from-to)*4;
-					} else {
-						to -= (to-from)*4;
-					}
-					outVal += fac*(from*(1-posOffset) + to*posOffset);
+					WaveTable *table = mSynth->mWaveTables.at(i);
+					float from = table->mWave[curSampPos%WAVESIZE];
+					float to = table->mWave[(curSampPos+1)%WAVESIZE];
+					outVal += fac *(from*(1-posOffset) + to*posOffset);
 					fac = 1-fac;
 				}
 
@@ -149,25 +143,57 @@ SimpleMorphSynth::SimpleMorphSynth()
 	mDelay = 0.5f;
 	mSourceFactor = 0;
 
-	mLastUIWidth = 600;
+	mLastUIWidth = 700;
 	mLastUIHeight = 610;
 
 	mLastPosInfo.resetToDefault();
 	mDelayPosition = 0;
+	WaveTable *sawT = new WaveTable();
+	WaveTable *sinT = new WaveTable();
+	sawT->executeAction(SawFunc);
+	sawT->executeAction(Reverse);
+	sinT->executeAction(SinFunc);
+	sinT->executeAction(Flip);
+	mWaveTables.push_back(sawT);
+	mWaveTables.push_back(sinT);
 
 	// Initialise the synth...
 	for (int i = 4; --i >= 0;)
 		mSynth.addVoice (new WaveTableVoice(this));   // These voices will play our custom sine-wave sounds..
 
 	mSynth.addSound (new WaveTableSound());
-	for (int i = 0; i < WAVESIZE; i++) {
-		mWave[i] = (float) (WAVESIZE/2-i)/WAVEHEIGHT;
-		mWave[i+WAVESIZE] = (float) sin((i*2*double_Pi)/WAVESIZE);
+
+}
+SimpleMorphSynth::~SimpleMorphSynth()
+{
+	for (size_t i = 0; i < mWaveTables.size(); i++) {
+		delete mWaveTables.at(i);
 	}
 }
 
-SimpleMorphSynth::~SimpleMorphSynth()
+float SimpleMorphSynth::getWaveTableValue(size_t table, int pos)
 {
+	if (table < mWaveTables.size() && 0 <= pos && pos < WAVESIZE) {
+		return mWaveTables.at(table)->mWave[pos];
+	}
+	return 0.;
+}
+
+void SimpleMorphSynth::setWaveTableValue(size_t table, int pos, float value)
+{
+	if (table < mWaveTables.size())
+	{
+		mWaveTables.at(table)->setWaveSection(pos, value);
+	}
+}
+
+WaveTable *SimpleMorphSynth::getWaveTable(size_t table)
+{
+	if (table < mWaveTables.size())
+	{
+		return mWaveTables[table];
+	}
+	return NULL;
 }
 
 //==============================================================================
