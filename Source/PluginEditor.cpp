@@ -61,7 +61,7 @@ SimpleMorphSynthProcessorEditor::SimpleMorphSynthProcessorEditor (SimpleMorphSyn
 
     // add the triangular resizer component for the bottom-right of the UI
     addAndMakeVisible (mResizer = new ResizableCornerComponent (this, &mResizeLimits));
-    mResizeLimits.setSizeLimits (600, 610, 600, 610);
+    mResizeLimits.setSizeLimits (700, 610, 700, 610);
 
     // set our component's initial size to be the last one that was stored in the filter's settings
     setSize (ownerFilter->mLastUIWidth,
@@ -100,14 +100,15 @@ void SimpleMorphSynthProcessorEditor::mouseDrag(const MouseEvent &event) {
 }
 
 int SimpleMorphSynthProcessorEditor::checkIfInWavetable(int x, int y, int forceTable) {
-	x-=WAVESIZE;
+	size_t numTables = getProcessor()->getNumTables();
+	x-=300;
 	if (x < WAVESIZE && x >= 0) {
-		for (int i = 0; i < 2; i++) {
-			if ((y < WAVEHEIGHT*2 && y >= 0 && forceTable == -1 )|| forceTable == i) {
-				getProcessor()->mWave[x+i*WAVESIZE] = std::max(std::min(((float) -y+WAVEHEIGHT)/WAVEHEIGHT, 1.f), -1.f);
+		for (size_t i = 0; i < numTables; i++) {
+			if ((y < WAVEHEIGHT*2 && y >= 0 && forceTable == -1 )|| (forceTable != -1 && ((size_t) forceTable) == i)) {
+				getProcessor()->setWaveTableValue(i, x, ((float) -y+WAVEHEIGHT)/WAVEHEIGHT);
 				return i;
 			}
-			y -= ((int) WAVEHEIGHT * 2.f + TABLESPACING);
+			y -= (int) (WAVEHEIGHT * 2.f + TABLESPACING);
 		}
 
 	}
@@ -123,14 +124,17 @@ void SimpleMorphSynthProcessorEditor::paint (Graphics& g)
 {
     g.setGradientFill (ColourGradient (Colours::white, 0, 0, Colours::grey, 0, (float) getHeight(), false));
 	g.fillAll();
-	g.setColour(Colours::black);
-    g.fillRect(300, 0, WAVESIZE, (int) WAVEHEIGHT * 2);
-	g.fillRect(300, 310, WAVESIZE, (int) WAVEHEIGHT * 2);
-	g.setColour(Colours::white);
-	float *mWave = getProcessor()->mWave;
-	for (int i = 0 ; i < WAVESIZE; i++) {
-		g.fillRect(300.f+i, WAVEHEIGHT, 1.f, -mWave[i]*WAVEHEIGHT);
-		g.fillRect(300.f+i, WAVEHEIGHT*3+TABLESPACING, 1.f, -mWave[i+WAVESIZE]*WAVEHEIGHT);
+	size_t tables = getProcessor()->getNumTables();
+	float yStart = WAVEHEIGHT;
+
+	for (size_t t = 0; t < tables; t++) {
+		g.setColour(Colours::black);
+		g.fillRect(300.f, yStart-WAVEHEIGHT, (float) WAVESIZE, WAVEHEIGHT * 2);
+		for (int i = 0; i < WAVESIZE; i++) {
+			g.setColour(Colours::white);
+			g.fillRect(300.f+i, yStart, 1.f, -getProcessor()->getWaveTableValue(t, i)*WAVEHEIGHT);
+		}
+		yStart += WAVEHEIGHT*2 + TABLESPACING;
 	}
 
 }
@@ -143,7 +147,7 @@ void SimpleMorphSynthProcessorEditor::resized()
 	mSourceSlider.setBounds(50, 350, 20, 100);
 
     const int keyboardHeight = 70;
-    mMidiKeyboard.setBounds (4, getHeight() - keyboardHeight - 4, (getWidth() - 8)/2, keyboardHeight);
+    mMidiKeyboard.setBounds (4, getHeight() - keyboardHeight - 4, 700-WAVESIZE-8, keyboardHeight);
 
     mResizer->setBounds (getWidth() - 16, getHeight() - 16, 16, 16);
 
