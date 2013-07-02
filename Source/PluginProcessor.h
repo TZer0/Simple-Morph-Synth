@@ -21,12 +21,12 @@
 //==============================================================================
 /**
 */
-class JuceDemoPluginAudioProcessor  : public AudioProcessor
+class SimpleMorphSynth  : public AudioProcessor
 {
 public:
     //==============================================================================
-    JuceDemoPluginAudioProcessor();
-    ~JuceDemoPluginAudioProcessor();
+    SimpleMorphSynth();
+    ~SimpleMorphSynth();
 
     //==============================================================================
     void prepareToPlay (double sampleRate, int samplesPerBlock);
@@ -75,16 +75,16 @@ public:
 
     // this is kept up to date with the midi messages that arrive, and the UI component
     // registers with it so it can represent the incoming messages
-    MidiKeyboardState keyboardState;
+    MidiKeyboardState mKeyboardState;
 
     // this keeps a copy of the last set of time info that was acquired during an audio
     // callback - the UI component will read this and display it.
-    AudioPlayHead::CurrentPositionInfo lastPosInfo;
+    AudioPlayHead::CurrentPositionInfo mLastPosInfo;
 
     // these are used to persist the UI's size - the values are stored along with the
     // filter's other parameters, and the UI component will update them when it gets
     // resized.
-    int lastUIWidth, lastUIHeight;
+    int mLastUIWidth, mLastUIHeight;
 
     //==============================================================================
     enum Parameters
@@ -96,19 +96,19 @@ public:
         totalNumParams
     };
 
-    float gain, delay;
-	float wave[WAVESIZE*2];
+    float mGain, mDelay;
+	float mWave[WAVESIZE*2];
+	float mSourceFactor;
 
 private:
     //==============================================================================
-    AudioSampleBuffer delayBuffer;
-    int delayPosition;
-	float sourceFactor;
+    AudioSampleBuffer mDelayBuffer;
+    int mDelayPosition;
 
     // the synth!
-    Synthesiser synth;
+    Synthesiser mSynth;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (JuceDemoPluginAudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SimpleMorphSynth)
 };
 
 #endif  // __PLUGINPROCESSOR_H_526ED7A9__

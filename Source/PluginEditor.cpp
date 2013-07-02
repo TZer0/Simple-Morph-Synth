@@ -12,114 +12,114 @@
 #include "PluginEditor.h"
 
 //==============================================================================
-JuceDemoPluginAudioProcessorEditor::JuceDemoPluginAudioProcessorEditor (JuceDemoPluginAudioProcessor* ownerFilter)
+SimpleMorphSynthProcessorEditor::SimpleMorphSynthProcessorEditor (SimpleMorphSynth* ownerFilter)
     : AudioProcessorEditor (ownerFilter),
-      midiKeyboard (ownerFilter->keyboardState, MidiKeyboardComponent::horizontalKeyboard),
-      infoLabel (String::empty),
-      gainLabel ("", "Throughput level:"),
-      delayLabel ("", "Delay:"),
-	  sourceLabel("", "Source Selection:"),
-      gainSlider ("gain"),
-      delaySlider ("delay"),
-	  sourceSlider("Source")
+      mMidiKeyboard (ownerFilter->mKeyboardState, MidiKeyboardComponent::horizontalKeyboard),
+      mInfoLabel (String::empty),
+      mGainLabel ("", "Throughput level:"),
+      mDelayLabel ("", "Delay:"),
+	  mSourceLabel("", "Source Selection:"),
+      mGainSlider ("gain"),
+      mDelaySlider ("delay"),
+	  mSourceSlider("Source")
 {
 	// add some sliders..
-    addAndMakeVisible (&gainSlider);
-    gainSlider.setSliderStyle (Slider::Rotary);
-    gainSlider.addListener (this);
-    gainSlider.setRange (0.0, 1.0, 0.01);
+    addAndMakeVisible (&mGainSlider);
+    mGainSlider.setSliderStyle (Slider::Rotary);
+    mGainSlider.addListener (this);
+    mGainSlider.setRange (0.0, 1.0, 0.01);
 
-    addAndMakeVisible (&delaySlider);
-    delaySlider.setSliderStyle (Slider::Rotary);
-    delaySlider.addListener (this);
-    delaySlider.setRange (0.0, 1.0, 0.01);
+    addAndMakeVisible (&mDelaySlider);
+    mDelaySlider.setSliderStyle (Slider::Rotary);
+    mDelaySlider.addListener (this);
+    mDelaySlider.setRange (0.0, 1.0, 0.01);
 
-	addAndMakeVisible(&sourceSlider);
-	sourceSlider.setSliderStyle(Slider::LinearVertical);
-	sourceSlider.addListener(this);
-	sourceSlider.setRange(0.0, 1.0, 0.01);
-	sourceSlider.setValue(0);
-	sourceSlider.repaint();
+	addAndMakeVisible(&mSourceSlider);
+	mSourceSlider.setSliderStyle(Slider::LinearVertical);
+	mSourceSlider.addListener(this);
+	mSourceSlider.setRange(0.0, 1.0, 0.01);
+	mSourceSlider.setValue(0);
+	mSourceSlider.repaint();
 
 
     // add some labels for the sliders..
-    gainLabel.attachToComponent (&gainSlider, false);
-    gainLabel.setFont (Font (11.0f));
+    mGainLabel.attachToComponent (&mGainSlider, false);
+    mGainLabel.setFont (Font (11.0f));
 
-    delayLabel.attachToComponent (&delaySlider, false);
-    delayLabel.setFont (Font (11.0f));
+    mDelayLabel.attachToComponent (&mDelaySlider, false);
+    mDelayLabel.setFont (Font (11.0f));
 
-	sourceLabel.attachToComponent (&sourceSlider, false);
-    sourceLabel.setFont (Font (11.0f));
+	mSourceLabel.attachToComponent (&mSourceSlider, false);
+    mSourceLabel.setFont (Font (11.0f));
 
     // add the midi keyboard component..
-    addAndMakeVisible (&midiKeyboard);
+    addAndMakeVisible (&mMidiKeyboard);
 
     // add a label that will display the current timecode and status..
-    addAndMakeVisible (&infoLabel);
-    infoLabel.setColour (Label::textColourId, Colours::blue);
+    addAndMakeVisible (&mInfoLabel);
+    mInfoLabel.setColour (Label::textColourId, Colours::blue);
 
     // add the triangular resizer component for the bottom-right of the UI
-    addAndMakeVisible (resizer = new ResizableCornerComponent (this, &resizeLimits));
-    resizeLimits.setSizeLimits (600, 610, 600, 610);
+    addAndMakeVisible (mResizer = new ResizableCornerComponent (this, &mResizeLimits));
+    mResizeLimits.setSizeLimits (600, 610, 600, 610);
 
     // set our component's initial size to be the last one that was stored in the filter's settings
-    setSize (ownerFilter->lastUIWidth,
-             ownerFilter->lastUIHeight);
-	waveClicked = -1;
+    setSize (ownerFilter->mLastUIWidth,
+             ownerFilter->mLastUIHeight);
+	mWaveClicked = -1;
     startTimer (50);
 }
 
-void JuceDemoPluginAudioProcessorEditor::mouseDown(const MouseEvent &event) {
-	lastDrag = event.getPosition().toFloat();
-	waveClicked = checkIfInWavetable((int)lastDrag.getX(), (int)lastDrag.getY());
+void SimpleMorphSynthProcessorEditor::mouseDown(const MouseEvent &event) {
+	mLastDrag = event.getPosition().toFloat();
+	mWaveClicked = checkIfInWavetable((int)mLastDrag.getX(), (int)mLastDrag.getY());
 }
 
-void JuceDemoPluginAudioProcessorEditor::mouseUp(const MouseEvent &) {
-	waveClicked = -1;
+void SimpleMorphSynthProcessorEditor::mouseUp(const MouseEvent &) {
+	mWaveClicked = -1;
 }
 
-void JuceDemoPluginAudioProcessorEditor::mouseDrag(const MouseEvent &event) {
-	if (waveClicked == -1) {
+void SimpleMorphSynthProcessorEditor::mouseDrag(const MouseEvent &event) {
+	if (mWaveClicked == -1) {
 		return;
 	}
 	auto pos = event.getPosition().toFloat();
-	auto dragVec = pos - lastDrag;
+	auto dragVec = pos - mLastDrag;
 	auto dragDistLeft = dragVec;
 	int i = 0;
 	while (dragDistLeft.getDistanceFromOrigin() > 0.2f && i < 10000) {
-		checkIfInWavetable((int)lastDrag.getX(), (int)lastDrag.getY(), waveClicked);
+		checkIfInWavetable((int)mLastDrag.getX(), (int)mLastDrag.getY(), mWaveClicked);
 		auto dPos = (dragVec/dragVec.getDistanceFromOrigin())*0.01f;
 		dragDistLeft -= dPos;
-		lastDrag += dPos;
+		mLastDrag += dPos;
 		i++;
 	}
-	lastDrag = pos;
-	checkIfInWavetable((int)lastDrag.getX(), (int)lastDrag.getY(), waveClicked );
+	mLastDrag = pos;
+	checkIfInWavetable((int)mLastDrag.getX(), (int)mLastDrag.getY(), mWaveClicked );
 	repaint();
 }
 
-int JuceDemoPluginAudioProcessorEditor::checkIfInWavetable(int x, int y, int forceTable) {
+int SimpleMorphSynthProcessorEditor::checkIfInWavetable(int x, int y, int forceTable) {
 	x-=WAVESIZE;
 	if (x < WAVESIZE && x >= 0) {
 		for (int i = 0; i < 2; i++) {
 			if ((y < WAVEHEIGHT*2 && y >= 0 && forceTable == -1 )|| forceTable == i) {
-				getProcessor()->wave[x+i*WAVESIZE] = std::max(std::min(((float) -y+WAVEHEIGHT)/WAVEHEIGHT, 1.f), -1.f);
+				getProcessor()->mWave[x+i*WAVESIZE] = std::max(std::min(((float) -y+WAVEHEIGHT)/WAVEHEIGHT, 1.f), -1.f);
 				return i;
 			}
 			y -= ((int) WAVEHEIGHT * 2.f + TABLESPACING);
 		}
-		
+
 	}
 	return -1;
 }
 
-JuceDemoPluginAudioProcessorEditor::~JuceDemoPluginAudioProcessorEditor()
+SimpleMorphSynthProcessorEditor::~SimpleMorphSynthProcessorEditor()
 {
 }
 
 //==============================================================================
-void JuceDemoPluginAudioProcessorEditor::paint (Graphics& g)
+void SimpleMorphSynthProcessorEditor::paint (Graphics& g)
 {
     g.setGradientFill (ColourGradient (Colours::white, 0, 0, Colours::grey, 0, (float) getHeight(), false));
 	g.fillAll();
@@ -127,65 +127,65 @@ void JuceDemoPluginAudioProcessorEditor::paint (Graphics& g)
     g.fillRect(300, 0, WAVESIZE, (int) WAVEHEIGHT * 2);
 	g.fillRect(300, 310, WAVESIZE, (int) WAVEHEIGHT * 2);
 	g.setColour(Colours::white);
-	float *wave = getProcessor()->wave;
+	float *mWave = getProcessor()->mWave;
 	for (int i = 0 ; i < WAVESIZE; i++) {
-		g.fillRect(300.f+i, WAVEHEIGHT, 1.f, -wave[i]*WAVEHEIGHT);
-		g.fillRect(300.f+i, WAVEHEIGHT*3+TABLESPACING, 1.f, -wave[i+WAVESIZE]*WAVEHEIGHT);
+		g.fillRect(300.f+i, WAVEHEIGHT, 1.f, -mWave[i]*WAVEHEIGHT);
+		g.fillRect(300.f+i, WAVEHEIGHT*3+TABLESPACING, 1.f, -mWave[i+WAVESIZE]*WAVEHEIGHT);
 	}
-    
+
 }
 
-void JuceDemoPluginAudioProcessorEditor::resized()
+void SimpleMorphSynthProcessorEditor::resized()
 {
-    infoLabel.setBounds (10, 4, 400, 25);
-    gainSlider.setBounds (20, 60, 150, 40);
-    delaySlider.setBounds (150, 60, 150, 40);
-	sourceSlider.setBounds(50, 350, 20, 100);
+    mInfoLabel.setBounds (10, 4, 400, 25);
+    mGainSlider.setBounds (20, 60, 150, 40);
+    mDelaySlider.setBounds (150, 60, 150, 40);
+	mSourceSlider.setBounds(50, 350, 20, 100);
 
     const int keyboardHeight = 70;
-    midiKeyboard.setBounds (4, getHeight() - keyboardHeight - 4, (getWidth() - 8)/2, keyboardHeight);
+    mMidiKeyboard.setBounds (4, getHeight() - keyboardHeight - 4, (getWidth() - 8)/2, keyboardHeight);
 
-    resizer->setBounds (getWidth() - 16, getHeight() - 16, 16, 16);
+    mResizer->setBounds (getWidth() - 16, getHeight() - 16, 16, 16);
 
-    getProcessor()->lastUIWidth = getWidth();
-    getProcessor()->lastUIHeight = getHeight();
+    getProcessor()->mLastUIWidth = getWidth();
+    getProcessor()->mLastUIHeight = getHeight();
 }
 
 //==============================================================================
 // This timer periodically checks whether any of the filter's parameters have changed...
-void JuceDemoPluginAudioProcessorEditor::timerCallback()
+void SimpleMorphSynthProcessorEditor::timerCallback()
 {
-    JuceDemoPluginAudioProcessor* ourProcessor = getProcessor();
+    SimpleMorphSynth* ourProcessor = getProcessor();
 
-    AudioPlayHead::CurrentPositionInfo newPos (ourProcessor->lastPosInfo);
+    AudioPlayHead::CurrentPositionInfo newPos (ourProcessor->mLastPosInfo);
 
-    if (lastDisplayedPosition != newPos)
+    if (mLastDisplayedPosition != newPos)
         displayPositionInfo (newPos);
-	
-    gainSlider.setValue (ourProcessor->gain, dontSendNotification);
-    delaySlider.setValue (ourProcessor->delay, dontSendNotification);
+
+    mGainSlider.setValue (ourProcessor->mGain, dontSendNotification);
+    mDelaySlider.setValue (ourProcessor->mDelay, dontSendNotification);
 }
 
 // This is our Slider::Listener callback, when the user drags a slider.
-void JuceDemoPluginAudioProcessorEditor::sliderValueChanged (Slider* slider)
+void SimpleMorphSynthProcessorEditor::sliderValueChanged (Slider* slider)
 {
-    if (slider == &gainSlider)
+    if (slider == &mGainSlider)
     {
         // It's vital to use setParameterNotifyingHost to change any parameters that are automatable
         // by the host, rather than just modifying them directly, otherwise the host won't know
         // that they've changed.
-        getProcessor()->setParameterNotifyingHost (JuceDemoPluginAudioProcessor::gainParam,
-                                                   (float) gainSlider.getValue());
+        getProcessor()->setParameterNotifyingHost (SimpleMorphSynth::gainParam,
+                                                   (float) mGainSlider.getValue());
     }
-    else if (slider == &delaySlider)
+    else if (slider == &mDelaySlider)
     {
-        getProcessor()->setParameterNotifyingHost (JuceDemoPluginAudioProcessor::delayParam,
-                                                   (float) delaySlider.getValue());
+        getProcessor()->setParameterNotifyingHost (SimpleMorphSynth::delayParam,
+                                                   (float) mDelaySlider.getValue());
     }
-	else if (slider == &sourceSlider)
+	else if (slider == &mSourceSlider)
 	{
-		getProcessor()->setParameterNotifyingHost (JuceDemoPluginAudioProcessor::sourceParam,
-													(float) sourceSlider.getValue());
+		getProcessor()->setParameterNotifyingHost (SimpleMorphSynth::sourceParam,
+													(float) mSourceSlider.getValue());
 	}
 }
 
@@ -228,9 +228,9 @@ static const String ppqToBarsBeatsString (double ppq, double /*lastBarPPQ*/, int
 }
 
 // Updates the text in our position label.
-void JuceDemoPluginAudioProcessorEditor::displayPositionInfo (const AudioPlayHead::CurrentPositionInfo& pos)
+void SimpleMorphSynthProcessorEditor::displayPositionInfo (const AudioPlayHead::CurrentPositionInfo& pos)
 {
-    lastDisplayedPosition = pos;
+    mLastDisplayedPosition = pos;
     String displayText;
     displayText.preallocateBytes (128);
 
@@ -245,5 +245,5 @@ void JuceDemoPluginAudioProcessorEditor::displayPositionInfo (const AudioPlayHea
     else if (pos.isPlaying)
         displayText << "  (playing)";
 
-    infoLabel.setText (displayText, dontSendNotification);
+    mInfoLabel.setText (displayText, dontSendNotification);
 }

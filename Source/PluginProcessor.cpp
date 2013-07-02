@@ -30,12 +30,11 @@ public:
 class WaveTableVoice  : public SynthesiserVoice
 {
 public:
-	WaveTableVoice(float *inWave, float *fac)
-		: angleDelta (0.0),
-		tailOff (0.0)
+	WaveTableVoice(SimpleMorphSynth *mSynth)
+		: mAngleDelta (0.0),
+		mTailOff (0.0)
 	{
-		wave = inWave;
-		sourceFac = fac;
+		mSynth = mSynth;
 	}
 
 	bool canPlaySound (SynthesiserSound* sound)
@@ -46,14 +45,14 @@ public:
 	void startNote (const int midiNoteNumber, const float velocity,
 		SynthesiserSound* /*sound*/, const int /*currentPitchWheelPosition*/)
 	{
-		currentAngle = 0.0;
-		level = velocity * 0.15;
-		tailOff = 0.0;
+		mCurrentAngle = 0.0;
+		mLevel = velocity * 0.15;
+		mTailOff = 0.0;
 
 		double cyclesPerSecond = MidiMessage::getMidiNoteInHertz (midiNoteNumber);
 		double cyclesPerSample = cyclesPerSecond / getSampleRate();
 
-		angleDelta = cyclesPerSample;
+		mAngleDelta = cyclesPerSample;
 	}
 
 	void stopNote (const bool allowTailOff)
@@ -63,16 +62,16 @@ public:
 			// start a tail-off by setting this flag. The render callback will pick up on
 			// this and do a fade out, calling clearCurrentNote() when it's finished.
 
-			if (tailOff == 0.0) // we only need to begin a tail-off if it's not already doing so - the
+			if (mTailOff == 0.0) // we only need to begin a tail-off if it's not already doing so - the
 				// stopNote method could be called more than once.
-					tailOff = 1.0;
+					mTailOff = 1.0;
 		}
 		else
 		{
 			// we're being told to stop playing immediately, so reset everything..
 
 			clearCurrentNote();
-			angleDelta = 0.0;
+			mAngleDelta = 0.0;
 		}
 	}
 
@@ -88,39 +87,46 @@ public:
 
 	void renderNextBlock (AudioSampleBuffer& outputBuffer, int startSample, int numSamples)
 	{
-		float fac = *sourceFac;
-		if (angleDelta != 0.0)
+		float fac = mSynth->mSourceFactor;
+		if (mAngleDelta != 0.0)
 		{
 
 			while (--numSamples >= 0)
 			{
-				float pos = (float) currentAngle*WAVESIZE;
+				float pos = (float) mCurrentAngle*WAVESIZE;
 				int curSampPos = (int) pos;
 				float posOffset = (float) pos-curSampPos;
 				float outVal = 0.f;
-				for (int i = 0; i < 2; i++) 
+				for (int i = 0; i < 2; i++)
 				{
-					outVal += fac*(wave[curSampPos%WAVESIZE + i * WAVESIZE]*(1-posOffset) + wave[(curSampPos+1)%WAVESIZE + i * WAVESIZE]*posOffset);
+					float from = mSynth->mWave[curSampPos%WAVESIZE + i * WAVESIZE];
+					float to = mSynth->mWave[(curSampPos+1)%WAVESIZE + i * WAVESIZE];
+					if (from > to) {
+						to += (from-to)*4;
+					} else {
+						to -= (to-from)*4;
+					}
+					outVal += fac*(from*(1-posOffset) + to*posOffset);
 					fac = 1-fac;
 				}
-				
-				const float currentSample = (float) (outVal * level * (tailOff > 0 ? tailOff : 1));
+
+				const float currentSample = (float) (outVal * mLevel * (mTailOff > 0 ? mTailOff : 1));
 
 				for (int i = outputBuffer.getNumChannels(); --i >= 0;)
 					*outputBuffer.getSampleData (i, startSample) += currentSample;
 
-				currentAngle += angleDelta;
+				mCurrentAngle += mAngleDelta;
 				++startSample;
 
-				if (tailOff > 0)
+				if (mTailOff > 0)
 				{
-					tailOff *= 0.99;
+					mTailOff *= 0.99;
 
-					if (tailOff <= 0.005)
+					if (mTailOff <= 0.005)
 					{
 						clearCurrentNote();
 
-						angleDelta = 0.0;
+						mAngleDelta = 0.0;
 						break;
 					}
 				}
@@ -129,77 +135,77 @@ public:
 	}
 
 private:
-	double currentAngle, angleDelta, level, tailOff;
-	float *wave, *sourceFac;
+	double mCurrentAngle, mAngleDelta, mLevel, mTailOff;
+	SimpleMorphSynth *mSynth;
 };
 
 
 //==============================================================================
-JuceDemoPluginAudioProcessor::JuceDemoPluginAudioProcessor()
-	: delayBuffer (2, 12000)
+SimpleMorphSynth::SimpleMorphSynth()
+	: mDelayBuffer (2, 12000)
 {
 	// Set up some default values..
-	gain = 1.0f;
-	delay = 0.5f;
-	sourceFactor = 0;
+	mGain = 1.0f;
+	mDelay = 0.5f;
+	mSourceFactor = 0;
 
-	lastUIWidth = 600;
-	lastUIHeight = 610;
+	mLastUIWidth = 600;
+	mLastUIHeight = 610;
 
-	lastPosInfo.resetToDefault();
-	delayPosition = 0;
+	mLastPosInfo.resetToDefault();
+	mDelayPosition = 0;
 
 	// Initialise the synth...
 	for (int i = 4; --i >= 0;)
-		synth.addVoice (new WaveTableVoice(wave, &sourceFactor));   // These voices will play our custom sine-wave sounds..
+		mSynth.addVoice (new WaveTableVoice(this));   // These voices will play our custom sine-wave sounds..
 
-	synth.addSound (new WaveTableSound());
+	mSynth.addSound (new WaveTableSound());
 	for (int i = 0; i < WAVESIZE; i++) {
-		wave[i] = (float) (WAVESIZE/2-i)/WAVEHEIGHT;
-		wave[i+WAVESIZE] = (float) sin((i*2*double_Pi)/WAVESIZE);
+		mWave[i] = (float) (WAVESIZE/2-i)/WAVEHEIGHT;
+		mWave[i+WAVESIZE] = (float) sin((i*2*double_Pi)/WAVESIZE);
 	}
 }
 
-JuceDemoPluginAudioProcessor::~JuceDemoPluginAudioProcessor()
+SimpleMorphSynth::~SimpleMorphSynth()
 {
 }
 
 //==============================================================================
-int JuceDemoPluginAudioProcessor::getNumParameters()
+int SimpleMorphSynth::getNumParameters()
 {
 	return totalNumParams;
 }
 
-float JuceDemoPluginAudioProcessor::getParameter (int index)
+float SimpleMorphSynth::getParameter (int index)
 {
 	// This method will be called by the host, probably on the audio thread, so
 	// it's absolutely time-critical. Don't use critical sections or anything
 	// UI-related, or anything at all that may block in any way!
 	switch (index)
 	{
-	case gainParam:     return gain;
-	case delayParam:    return delay;
-	case sourceParam:    return sourceFactor;
+	case gainParam:     return mGain;
+	case delayParam:    return mDelay;
+	case sourceParam:    return mSourceFactor;
 
 	default:            return 0.0f;
 	}
 }
 
-void JuceDemoPluginAudioProcessor::setParameter (int index, float newValue)
+void SimpleMorphSynth::setParameter (int index, float newValue)
 {
 	// This method will be called by the host, probably on the audio thread, so
 	// it's absolutely time-critical. Don't use critical sections or anything
 	// UI-related, or anything at all that may block in any way!
 	switch (index)
 	{
-	case gainParam:     gain = newValue;  break;
-	case delayParam:    delay = newValue;  break;
-	case sourceParam:		sourceFactor = newValue; break;
+	case gainParam:     mGain = newValue;  break;
+	case delayParam:    mDelay = newValue;  break;
+	case sourceParam:		mSourceFactor = newValue; break;
 	default:            break;
 	}
 }
 
-const String JuceDemoPluginAudioProcessor::getParameterName (int index)
+const String SimpleMorphSynth::getParameterName (int index)
 {
 	switch (index)
 	{
@@ -213,69 +219,69 @@ const String JuceDemoPluginAudioProcessor::getParameterName (int index)
 	return String::empty;
 }
 
-const String JuceDemoPluginAudioProcessor::getParameterText (int index)
+const String SimpleMorphSynth::getParameterText (int index)
 {
 	return String (getParameter (index), 2);
 }
 
 //==============================================================================
-void JuceDemoPluginAudioProcessor::prepareToPlay (double sampleRate, int /*samplesPerBlock*/)
+void SimpleMorphSynth::prepareToPlay (double sampleRate, int /*samplesPerBlock*/)
 {
 	// Use this method as the place to do any pre-playback
 	// initialisation that you need..
-	synth.setCurrentPlaybackSampleRate (sampleRate);
-	keyboardState.reset();
-	delayBuffer.clear();
+	mSynth.setCurrentPlaybackSampleRate (sampleRate);
+	mKeyboardState.reset();
+	mDelayBuffer.clear();
 }
 
-void JuceDemoPluginAudioProcessor::releaseResources()
+void SimpleMorphSynth::releaseResources()
 {
 	// When playback stops, you can use this as an opportunity to free up any
 	// spare memory, etc.
-	keyboardState.reset();
+	mKeyboardState.reset();
 }
 
-void JuceDemoPluginAudioProcessor::reset()
+void SimpleMorphSynth::reset()
 {
 	// Use this method as the place to clear any delay lines, buffers, etc, as it
 	// means there's been a break in the audio's continuity.
-	delayBuffer.clear();
+	mDelayBuffer.clear();
 }
 
-void JuceDemoPluginAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages)
+void SimpleMorphSynth::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages)
 {
 	const int numSamples = buffer.getNumSamples();
 	int channel, dp = 0;
 
 	// Go through the incoming data, and apply our gain to it...
 	for (channel = 0; channel < getNumInputChannels(); ++channel)
-		buffer.applyGain (channel, 0, buffer.getNumSamples(), gain);
+		buffer.applyGain (channel, 0, buffer.getNumSamples(), mGain);
 
 	// Now pass any incoming midi messages to our keyboard state object, and let it
 	// add messages to the buffer if the user is clicking on the on-screen keys
-	keyboardState.processNextMidiBuffer (midiMessages, 0, numSamples, true);
+	mKeyboardState.processNextMidiBuffer (midiMessages, 0, numSamples, true);
 
 	// and now get the synth to process these midi events and generate its output.
-	synth.renderNextBlock (buffer, midiMessages, 0, numSamples);
+	mSynth.renderNextBlock (buffer, midiMessages, 0, numSamples);
 
 	// Apply our delay effect to the new output..
 	for (channel = 0; channel < getNumInputChannels(); ++channel)
 	{
 		float* channelData = buffer.getSampleData (channel);
-		float* delayData = delayBuffer.getSampleData (jmin (channel, delayBuffer.getNumChannels() - 1));
-		dp = delayPosition;
+		float* delayData = mDelayBuffer.getSampleData (jmin (channel, mDelayBuffer.getNumChannels() - 1));
+		dp = mDelayPosition;
 
 		for (int i = 0; i < numSamples; ++i)
 		{
 			const float in = channelData[i];
 			channelData[i] += delayData[dp];
-			delayData[dp] = (delayData[dp] + in) * delay;
-			if (++dp >= delayBuffer.getNumSamples())
+			delayData[dp] = (delayData[dp] + in) * mDelay;
+			if (++dp >= mDelayBuffer.getNumSamples())
 				dp = 0;
 		}
 	}
 
-	delayPosition = dp;
+	mDelayPosition = dp;
 
 	// In case we have more outputs than inputs, we'll clear any output
 	// channels that didn't contain input data, (because these aren't
@@ -289,23 +295,23 @@ void JuceDemoPluginAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 	if (getPlayHead() != nullptr && getPlayHead()->getCurrentPosition (newTime))
 	{
 		// Successfully got the current time from the host..
-		lastPosInfo = newTime;
+		mLastPosInfo = newTime;
 	}
 	else
 	{
 		// If the host fails to fill-in the current time, we'll just clear it to a default..
-		lastPosInfo.resetToDefault();
+		mLastPosInfo.resetToDefault();
 	}
 }
 
 //==============================================================================
-AudioProcessorEditor* JuceDemoPluginAudioProcessor::createEditor()
+AudioProcessorEditor* SimpleMorphSynth::createEditor()
 {
-	return new JuceDemoPluginAudioProcessorEditor (this);
+	return new SimpleMorphSynthProcessorEditor (this);
 }
 
 //==============================================================================
-void JuceDemoPluginAudioProcessor::getStateInformation (MemoryBlock& destData)
+void SimpleMorphSynth::getStateInformation (MemoryBlock& destData)
 {
 	// You should use this method to store your parameters in the memory block.
 	// Here's an example of how you can use XML to make it easy and more robust:
@@ -314,16 +320,16 @@ void JuceDemoPluginAudioProcessor::getStateInformation (MemoryBlock& destData)
 	XmlElement xml ("MYPLUGINSETTINGS");
 
 	// add some attributes to it..
-	xml.setAttribute ("uiWidth", lastUIWidth);
-	xml.setAttribute ("uiHeight", lastUIHeight);
-	xml.setAttribute ("gain", gain);
-	xml.setAttribute ("delay", delay);
+	xml.setAttribute ("uiWidth", mLastUIWidth);
+	xml.setAttribute ("uiHeight", mLastUIHeight);
+	xml.setAttribute ("gain", mGain);
+	xml.setAttribute ("delay", mDelay);
 
 	// then use this helper function to stuff it into the binary blob and return it..
 	copyXmlToBinary (xml, destData);
 }
 
-void JuceDemoPluginAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+void SimpleMorphSynth::setStateInformation (const void* data, int sizeInBytes)
 {
 	// You should use this method to restore your parameters from this memory block,
 	// whose contents will have been created by the getStateInformation() call.
@@ -337,36 +343,36 @@ void JuceDemoPluginAudioProcessor::setStateInformation (const void* data, int si
 		if (xmlState->hasTagName ("MYPLUGINSETTINGS"))
 		{
 			// ok, now pull out our parameters..
-			lastUIWidth  = xmlState->getIntAttribute ("uiWidth", lastUIWidth);
-			lastUIHeight = xmlState->getIntAttribute ("uiHeight", lastUIHeight);
+			mLastUIWidth  = xmlState->getIntAttribute ("uiWidth", mLastUIWidth);
+			mLastUIHeight = xmlState->getIntAttribute ("uiHeight", mLastUIHeight);
 
-			gain  = (float) xmlState->getDoubleAttribute ("gain", gain);
-			delay = (float) xmlState->getDoubleAttribute ("delay", delay);
+			mGain  = (float) xmlState->getDoubleAttribute ("gain", mGain);
+			mDelay = (float) xmlState->getDoubleAttribute ("delay", mDelay);
 		}
 	}
 }
 
-const String JuceDemoPluginAudioProcessor::getInputChannelName (const int channelIndex) const
+const String SimpleMorphSynth::getInputChannelName (const int channelIndex) const
 {
 	return String (channelIndex + 1);
 }
 
-const String JuceDemoPluginAudioProcessor::getOutputChannelName (const int channelIndex) const
+const String SimpleMorphSynth::getOutputChannelName (const int channelIndex) const
 {
 	return String (channelIndex + 1);
 }
 
-bool JuceDemoPluginAudioProcessor::isInputChannelStereoPair (int /*index*/) const
+bool SimpleMorphSynth::isInputChannelStereoPair (int /*index*/) const
 {
 	return true;
 }
 
-bool JuceDemoPluginAudioProcessor::isOutputChannelStereoPair (int /*index*/) const
+bool SimpleMorphSynth::isOutputChannelStereoPair (int /*index*/) const
 {
 	return true;
 }
 
-bool JuceDemoPluginAudioProcessor::acceptsMidi() const
+bool SimpleMorphSynth::acceptsMidi() const
 {
 #if JucePlugin_WantsMidiInput
 	return true;
@@ -375,7 +381,7 @@ bool JuceDemoPluginAudioProcessor::acceptsMidi() const
 #endif
 }
 
-bool JuceDemoPluginAudioProcessor::producesMidi() const
+bool SimpleMorphSynth::producesMidi() const
 {
 #if JucePlugin_ProducesMidiOutput
 	return true;
@@ -384,12 +390,12 @@ bool JuceDemoPluginAudioProcessor::producesMidi() const
 #endif
 }
 
-bool JuceDemoPluginAudioProcessor::silenceInProducesSilenceOut() const
+bool SimpleMorphSynth::silenceInProducesSilenceOut() const
 {
 	return false;
 }
 
-double JuceDemoPluginAudioProcessor::getTailLengthSeconds() const
+double SimpleMorphSynth::getTailLengthSeconds() const
 {
 	return 0.0;
 }
@@ -398,5 +404,5 @@ double JuceDemoPluginAudioProcessor::getTailLengthSeconds() const
 // This creates new instances of the plugin..
 AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-	return new JuceDemoPluginAudioProcessor();
+	return new SimpleMorphSynth();
 }

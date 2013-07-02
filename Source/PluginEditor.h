@@ -18,13 +18,13 @@
 //==============================================================================
 /** This is the editor component that our filter will display.
 */
-class JuceDemoPluginAudioProcessorEditor  : public AudioProcessorEditor,
+class SimpleMorphSynthProcessorEditor  : public AudioProcessorEditor,
                                             public SliderListener,
                                             public Timer
 {
 public:
-    JuceDemoPluginAudioProcessorEditor (JuceDemoPluginAudioProcessor* ownerFilter);
-    ~JuceDemoPluginAudioProcessorEditor();
+    SimpleMorphSynthProcessorEditor (SimpleMorphSynth* ownerFilter);
+    ~SimpleMorphSynthProcessorEditor();
 
     //==============================================================================
     void timerCallback();
@@ -36,24 +36,24 @@ public:
 	void mouseDrag(const MouseEvent &event);
 
 private:
-    MidiKeyboardComponent midiKeyboard;
-    Label infoLabel, gainLabel, delayLabel, sourceLabel;
-    Slider gainSlider;
-    Slider delaySlider;
-	Slider sourceSlider;
+    MidiKeyboardComponent mMidiKeyboard;
+    Label mInfoLabel, mGainLabel, mDelayLabel, mSourceLabel;
+    Slider mGainSlider;
+    Slider mDelaySlider;
+	Slider mSourceSlider;
 
-	int waveClicked;
-	juce::Point<float> lastDrag;
-	bool dragging;
+	int mWaveClicked;
+	juce::Point<float> mLastDrag;
+	bool mDragging;
 	int checkIfInWavetable(int x, int y, int forceTable = -1);
-    ScopedPointer<ResizableCornerComponent> resizer;
-    ComponentBoundsConstrainer resizeLimits;
+    ScopedPointer<ResizableCornerComponent> mResizer;
+    ComponentBoundsConstrainer mResizeLimits;
 
-    AudioPlayHead::CurrentPositionInfo lastDisplayedPosition;
+    AudioPlayHead::CurrentPositionInfo mLastDisplayedPosition;
 
-    JuceDemoPluginAudioProcessor* getProcessor() const
+    SimpleMorphSynth* getProcessor() const
     {
-        return static_cast <JuceDemoPluginAudioProcessor*> (getAudioProcessor());
+        return static_cast <SimpleMorphSynth*> (getAudioProcessor());
     }
 
     void displayPositionInfo (const AudioPlayHead::CurrentPositionInfo& pos);
