@@ -237,19 +237,26 @@ float SimpleMorphSynth::getParameter (int index)
 	switch (index)
 	{
 	case SourceParam:    return mSourceFactor;
-
+	case SmoothStrengthParam:	return mSmoothStrengthFactor;
+	case SmoothRangeParam:	return mSmoothRangeFactor;
 	default:            return 0.0f;
 	}
 }
 
 const String SimpleMorphSynth::getParameterName (int index)
 {
+	int target = 0;
+	if (index >= TotalNumParams) {
+		index -= TotalNumParams;
+		index += LASTCOMMONPARAM;
+		target++;
+	}
 	switch (index)
 	{
 	case SourceParam:   return "Source";
 	case SmoothStrengthParam:	return "SmoothStrength";
 	case SmoothRangeParam:	return "SmoothRange";
-
+	case AdjustPhaseParam: return juce::String("AdjustOSCPhase") + juce::String(target+1);
 
 	default:            break;
 	}
@@ -260,16 +267,29 @@ const String SimpleMorphSynth::getParameterName (int index)
 
 void SimpleMorphSynth::setParameter (int index, float newValue)
 {
+	int target = 0;
+	if (index >= TotalNumParams) {
+		index += LASTCOMMONPARAM;
+		index -= TotalNumParams;
+		target++;
+	}
 	// This method will be called by the host, probably on the audio thread, so
 	// it's absolutely time-critical. Don't use critical sections or anything
 	// UI-related, or anything at all that may block in any way!
 	switch (index)
 	{
-	case SourceParam:		mSourceFactor = newValue; break;
+	case SourceParam:				mSourceFactor = newValue; break;
 	case SmoothStrengthParam:		mSmoothStrengthFactor = newValue; break;
-	case SmoothRangeParam:		mSmoothRangeFactor = newValue; break;
-
-	default:            break;
+	case SmoothRangeParam:			mSmoothRangeFactor = newValue; break;
+	case AdjustPhaseParam:
+				if (std::abs(newValue) < 0.1) {
+					return;
+				}
+				newValue = std::ceil(newValue);
+				mWaveTables.at(target)->executeAction(AdjustPhase, (int) newValue); 
+				
+				break;
+	default:    break;
 	}
 }
 
@@ -374,6 +394,9 @@ void SimpleMorphSynth::getStateInformation (MemoryBlock& destData)
 	XmlElement xml ("SIMPLEMORPHSSYNTH");
 
 	xml.setAttribute ("mSourceFactor", mSourceFactor);
+	xml.setAttribute ("mSmoothStrengthFactor", mSmoothStrengthFactor);
+	xml.setAttribute ("mSmoothRangeFactor", mSmoothRangeFactor);
+
 
 	// then use this helper function to stuff it into the binary blob and return it..
 	copyXmlToBinary (xml, destData);
@@ -391,7 +414,9 @@ void SimpleMorphSynth::setStateInformation (const void* data, int sizeInBytes)
 	{
 		if (xmlState->hasTagName ("SIMPLEMORPHSSYNTH"))
 		{
-			mSourceFactor  = (float) xmlState->getDoubleAttribute ("mSourceFactor", mSourceFactor);
+			mSourceFactor  = (float) xmlState->getDoubleAttribute ("mSourceFactor", 0.0);
+			mSmoothStrengthFactor  = (float) xmlState->getDoubleAttribute ("mSmoothStrengthFactor", 0.0);
+			mSmoothRangeFactor  = (float) xmlState->getDoubleAttribute ("mSmoothRangeFactor", 1.0);
 		}
 	}
 }

@@ -26,7 +26,9 @@ SimpleMorphSynthProcessorEditor::SimpleMorphSynthProcessorEditor (SimpleMorphSyn
              ownerFilter->mLastUIHeight);
 	addSlider(SourceParam, juce::Point<int>(390, 20), juce::Point<int>(20, (int) WAVEHEIGHT*2-40));
 	addSlider(SmoothStrengthParam, juce::Point<int>(380, 450), juce::Point<int>(20, 100));
-	addSlider(SmoothRangeParam, juce::Point<int>(400, 450), juce::Point<int>(20, 100), 1, 16);
+	addSlider(SmoothRangeParam, juce::Point<int>(400, 450), juce::Point<int>(20, 100), 1., 16.);
+	addSlider(AdjustPhaseParam, juce::Point<int>(100, (int) WAVEHEIGHT*2), juce::Point<int>(WAVESIZE-200, 20), -10, 10, 0, juce::Slider::SliderStyle::LinearHorizontal);
+	addSlider(AdjustPhaseParam, juce::Point<int>(600, (int) WAVEHEIGHT*2), juce::Point<int>(WAVESIZE-200, 20), -10, 10, 1, juce::Slider::SliderStyle::LinearHorizontal);
 
 	for (int i = 0; i < 2; i++) {
 		for (int j = 0; j <= LASTRADIOACTION; j++) {
@@ -39,21 +41,24 @@ SimpleMorphSynthProcessorEditor::SimpleMorphSynthProcessorEditor (SimpleMorphSyn
 	}
 
 	mWaveClicked = -1;
-    startTimer (50);
+	mDraggingSlider = nullptr;
+    startTimer (10);
 	resized();
 }
 
 void SimpleMorphSynthProcessorEditor::addSlider(Parameter param, juce::Point<int> point, 
-				juce::Point<int> size, double minVal, double maxVal, juce::Slider::SliderStyle style)
+				juce::Point<int> size, double minVal, double maxVal, int target, juce::Slider::SliderStyle style)
 {
 	ComponentContainer cont;
 	cont.mParam = param;
 	cont.mLabel = new Label(getProcessor()->getParameterName(param));
+	cont.mTarget = target;
 	Slider *sl = new Slider();
 	sl->setBounds(point.getX(), point.getY(), size.getX(), size.getY());
 
 	addAndMakeVisible(sl);
 	sl->setSliderStyle(style);
+	sl->setTextBoxStyle(juce::Slider::TextEntryBoxPosition::NoTextBox, false, 0, 0);
 	sl->addListener(this);
 	sl->setRange(minVal, maxVal, 0.01);
 	sl->setValue(0);
@@ -78,6 +83,10 @@ void SimpleMorphSynthProcessorEditor::mouseDown(const MouseEvent &event) {
 
 void SimpleMorphSynthProcessorEditor::mouseUp(const MouseEvent &) {
 	mWaveClicked = -1;
+	if (mDraggingSlider != nullptr) {
+		mDraggingSlider->setValue(0);
+	}
+	mDraggingSlider = nullptr;
 }
 
 void SimpleMorphSynthProcessorEditor::mouseDrag(const MouseEvent &event) {
@@ -194,6 +203,10 @@ void SimpleMorphSynthProcessorEditor::timerCallback()
     SimpleMorphSynth* ourProcessor = getProcessor();
 
     AudioPlayHead::CurrentPositionInfo newPos (ourProcessor->mLastPosInfo);
+
+	if (mDraggingSlider != nullptr) {
+		//sliderValueChanged(mDraggingSlider);
+	}
 }
 
 // This is our Slider::Listener callback, when the user drags a slider.
@@ -202,8 +215,12 @@ void SimpleMorphSynthProcessorEditor::sliderValueChanged (Slider* slider)
 	for (size_t i = 0; i < mSliders.size(); i++) {
 	if (mSliders[i].mComponent == slider)
 		{
-			getProcessor()->setParameterNotifyingHost (mSliders[i].mParam,
+			getProcessor()->setParameterNotifyingHost (mSliders[i].mParam + ((int)mSliders[i].mTarget)*(TotalNumParams-LASTCOMMONPARAM),
 														(float) slider->getValue());
+			if (mSliders[i].mParam == AdjustPhaseParam) {
+				mDraggingSlider = slider;
+				repaint();
+			}
 			repaint();
 		}
 	}

@@ -14,15 +14,17 @@ static juce::Point<int> PresetFuncButtonPoints[2] = { OscPoints[0].toInt() + juc
 class ComponentContainer
 {
 public:
-	ComponentContainer() { mLabel = nullptr; mComponent = nullptr; mParam = NoneParam; }
-	ComponentContainer(Label *label, Component *comp, Parameter p) {
+	ComponentContainer() { mLabel = nullptr; mComponent = nullptr; mParam = NoneParam; mTarget = 0;}
+	ComponentContainer(Label *label, Component *comp, Parameter p, int t) {
 		mLabel = label;
 		mComponent = comp;
 		mParam = p;
+		mTarget = t;
 	}
 	Label *mLabel;
 	Component *mComponent;
 	Parameter mParam;
+	size_t mTarget;
 };
 
 class SimpleMorphSynthProcessorEditor  : public AudioProcessorEditor,
@@ -47,6 +49,7 @@ private:
     MidiKeyboardComponent mMidiKeyboard;
 
 	int mWaveClicked;
+	juce::Slider *mDraggingSlider;
 	juce::Point<float> mLastDrag;
 	bool mDragging;
 	int checkIfInWavetable(int x, int y, int forceTable = -1);
@@ -55,7 +58,7 @@ private:
 	std::vector<ComponentContainer> mSliders;
 	void buttonClicked(Button *button);
 	void buttonStateChanged(Button *);
-	void addSlider(Parameter param, juce::Point<int> point, juce::Point<int> size, double minVal = 0.0, double maxVal = 1.0,
+	void addSlider(Parameter param, juce::Point<int> point, juce::Point<int> size, double minVal = 0.0, double maxVal = 1.0, int target = 0,
 		juce::Slider::SliderStyle style = juce::Slider::SliderStyle::LinearVertical);
 	
     SimpleMorphSynth* getProcessor() const

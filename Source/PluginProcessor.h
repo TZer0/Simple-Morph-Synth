@@ -32,14 +32,19 @@ enum Action
 	UserFunc,
 	Reverse,
 	Flip,
-	MeanFilter
+	MeanFilter,
+	AdjustPhase,
 };
+
+#define LASTCOMMONPARAM SmoothRangeParam
 
 enum Parameter
 {
 	SourceParam = 0,
 	SmoothStrengthParam,
 	SmoothRangeParam,
+
+	AdjustPhaseParam,
 
     TotalNumParams,
 	NoneParam
@@ -136,6 +141,21 @@ public:
 				}
 				mWave[i] /= range;
 			}
+		} else if (ac == AdjustPhase) {
+			if (param == 0) {
+				return;
+			}
+			float oldWave[WAVESIZE];
+			for (int i = 0; i < WAVESIZE; i++) {
+				oldWave[i] = mWave[i];
+			}
+			for (int i = 0; i < WAVESIZE; i++) {
+				int target = (i + param)%WAVESIZE;
+				if (target < 0) {
+					target += WAVESIZE;
+				}
+				mWave[i] = oldWave[target];
+			}
 		}
 	}
 
@@ -168,7 +188,7 @@ public:
 
     int getNumParameters();
     float getParameter (int index);
-    void setParameter (int index, float newValue);
+	void setParameter (int index, float newValue);
 	const String getParameterName (int index);
     const String getParameterText (int index);
 
