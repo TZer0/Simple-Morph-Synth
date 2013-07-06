@@ -59,20 +59,32 @@ SimpleMorphSynthProcessorEditor::SimpleMorphSynthProcessorEditor (SimpleMorphSyn
     addAndMakeVisible (&mInfoLabel);
     mInfoLabel.setColour (Label::textColourId, Colours::blue);
 
-    // add the triangular resizer component for the bottom-right of the UI
-    addAndMakeVisible (mResizer = new ResizableCornerComponent (this, &mResizeLimits));
-    mResizeLimits.setSizeLimits (700, 610, 700, 610);
-
     // set our component's initial size to be the last one that was stored in the filter's settings
     setSize (ownerFilter->mLastUIWidth,
              ownerFilter->mLastUIHeight);
+
+	for (int i = 0; i < 2; i++) {
+		for (int j = 0; j <= LASTRADIOACTION; j++) {
+			juce::ToggleButton *button = new juce::ToggleButton(convertActionToString(j));
+			button->setRadioGroupId(i + 1);
+			button->addListener(this);
+			addAndMakeVisible(button);
+			mButtons.push_back(button);
+		}
+	}
+
 	mWaveClicked = -1;
     startTimer (50);
+	resized();
 }
 
 void SimpleMorphSynthProcessorEditor::mouseDown(const MouseEvent &event) {
 	mLastDrag = event.getPosition().toFloat();
 	mWaveClicked = checkIfInWavetable((int)mLastDrag.getX(), (int)mLastDrag.getY());
+	if (mWaveClicked != -1) {
+		size_t i = LASTRADIOACTION + mWaveClicked*(LASTRADIOACTION + 1);
+		mButtons[i]->triggerClick();
+	}
 }
 
 void SimpleMorphSynthProcessorEditor::mouseUp(const MouseEvent &) {
@@ -101,22 +113,24 @@ void SimpleMorphSynthProcessorEditor::mouseDrag(const MouseEvent &event) {
 
 int SimpleMorphSynthProcessorEditor::checkIfInWavetable(int x, int y, int forceTable) {
 	size_t numTables = getProcessor()->getNumTables();
-	x-=300;
-	if (x < WAVESIZE && x >= 0) {
-		for (size_t i = 0; i < numTables; i++) {
-			if ((y < WAVEHEIGHT*2 && y >= 0 && forceTable == -1 )|| (forceTable != -1 && ((size_t) forceTable) == i)) {
-				getProcessor()->setWaveTableValue(i, x, ((float) -y+WAVEHEIGHT)/WAVEHEIGHT);
-				return i;
-			}
-			y -= (int) (WAVEHEIGHT * 2.f + TABLESPACING);
+	for (size_t i = 0; i < numTables; i++) {
+		juce::Point<float> table = OscPoints[i];
+		int tx = (int) (x - table.getX()); int ty = (int) (y - table.getY());
+		if ((0 <= tx && tx < WAVESIZE && 0 <= ty && ty < WAVEHEIGHT*2 && forceTable == -1 ) 
+					|| (forceTable != -1 && ((size_t) forceTable) == i)) {
+			getProcessor()->setWaveTableValue(i, tx, ((float) -ty+WAVEHEIGHT)/WAVEHEIGHT);
+			return i;
 		}
-
 	}
+
 	return -1;
 }
 
 SimpleMorphSynthProcessorEditor::~SimpleMorphSynthProcessorEditor()
 {
+	for (size_t i = 0; i < mButtons.size(); i++) {
+		delete mButtons[i];
+	}
 }
 
 //==============================================================================
@@ -125,18 +139,44 @@ void SimpleMorphSynthProcessorEditor::paint (Graphics& g)
     g.setGradientFill (ColourGradient (Colours::white, 0, 0, Colours::grey, 0, (float) getHeight(), false));
 	g.fillAll();
 	size_t tables = getProcessor()->getNumTables();
-	float yStart = WAVEHEIGHT;
+
+	float wave[WAVESIZE], maxVal = 0;
+	for (int i = 0; i < WAVESIZE; i++) {
+		wave[i] = 0;
+	}
+	float source = (float) mSourceSlider.getValue();
 
 	for (size_t t = 0; t < tables; t++) {
+		juce::Point<float> oscPoint = OscPoints[t];
+		float x = oscPoint.getX(); float y = oscPoint.getY();
 		g.setColour(Colours::black);
-		g.fillRect(300.f, yStart-WAVEHEIGHT, (float) WAVESIZE, WAVEHEIGHT * 2);
+		g.fillRect(x, y, (float) WAVESIZE, WAVEHEIGHT * 2);
+		g.setColour(Colours::white);
+		y += WAVEHEIGHT;
 		for (int i = 0; i < WAVESIZE; i++) {
-			g.setColour(Colours::white);
-			g.fillRect(300.f+i, yStart, 1.f, -getProcessor()->getWaveTableValue(t, i)*WAVEHEIGHT);
+			float waveVal = getProcessor()->getWaveTableValue(t, i);
+			wave[i] += waveVal*source;
+			g.fillRect(x+i, y, 1.f, -waveVal*WAVEHEIGHT);
 		}
-		yStart += WAVEHEIGHT*2 + TABLESPACING;
+		source = 1-source;
 	}
 
+
+	for (int i = 0; i < WAVESIZE; i++) {
+		maxVal = std::max(maxVal, std::abs(wave[i]));
+	}
+
+	maxVal = std::max(maxVal, 0.1f);
+
+	juce::Point<float> oscPoint = OscPoints[2];
+	float x = oscPoint.getX(); float y = oscPoint.getY();
+	g.setColour(Colours::darkgrey);
+	g.fillRect(x, y, (float) WAVESIZE, WAVEHEIGHT*2);
+	g.setColour(Colours::darkred);
+	y += WAVEHEIGHT;
+	for (int i = 0; i < WAVESIZE; i++) {
+		g.fillRect(x+i, y, 1.f, (-wave[i]*WAVEHEIGHT)/maxVal);
+	}
 }
 
 void SimpleMorphSynthProcessorEditor::resized()
@@ -149,7 +189,19 @@ void SimpleMorphSynthProcessorEditor::resized()
     const int keyboardHeight = 70;
     mMidiKeyboard.setBounds (4, getHeight() - keyboardHeight - 4, 700-WAVESIZE-8, keyboardHeight);
 
-    mResizer->setBounds (getWidth() - 16, getHeight() - 16, 16, 16);
+	size_t k = 0;
+	for (int i = 0; i < 2; i++) {
+		juce::Point<int> buttonPoint = PresetFuncButtonPoints[i];
+		int x = buttonPoint.getX(); int y = buttonPoint.getY();
+
+		for (int j = 0; j <= LASTRADIOACTION; j++) {
+			if (mButtons.size() <= k) {
+				break;
+			}
+			mButtons[k]->setBounds(x, y+j*PRESETACTIONBUTTONSIZE, PRESETACTIONBUTTONSIZE+60, PRESETACTIONBUTTONSIZE);
+			k++;
+		}
+	}
 
     getProcessor()->mLastUIWidth = getWidth();
     getProcessor()->mLastUIHeight = getHeight();
@@ -190,7 +242,28 @@ void SimpleMorphSynthProcessorEditor::sliderValueChanged (Slider* slider)
 	{
 		getProcessor()->setParameterNotifyingHost (SimpleMorphSynth::sourceParam,
 													(float) mSourceSlider.getValue());
+		repaint();
 	}
+}
+
+void SimpleMorphSynthProcessorEditor::buttonClicked(Button *button) {
+	size_t k = 0;
+	for (size_t i = 0; i < 2; i++) {
+		for (size_t j = 0; j <= LASTRADIOACTION; j++) {
+			if (mButtons.size() <= k) {
+				break;
+			}
+			if (mButtons[k] == button) {
+				getProcessor()->mWaveTables.at(i)->executeAction(j);
+				repaint();
+				return;
+			}
+			k++;
+		}
+	}
+}
+
+void SimpleMorphSynthProcessorEditor::buttonStateChanged(Button *button) {
 }
 
 //==============================================================================

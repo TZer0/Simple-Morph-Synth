@@ -13,18 +13,29 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 
-#define WAVESIZE 400
-#define WAVEHEIGHT 150.f
+#define WAVESIZE 300
+#define WAVEHEIGHT 100.f
 #define TABLESPACING 10.f
+
+#define WINDOWWIDTH 800
+#define WINDOWHEIGHT 600
+
+#define LASTRADIOACTION Action::UserFunc
+
 enum Action
 {
 	SinFunc = 0,
 	CosFunc,
 	SawFunc,
 	SquareFunc,
+	TriFunc,
+	UserFunc,
 	Reverse,
-	Flip
+	Flip,
+	MeanFilter
 };
+
+juce::String convertActionToString(int act);
 
 class WaveTable
 {
@@ -43,7 +54,8 @@ public:
 			mWave[x] = std::max(std::min(y, 1.f), -1.f);
 		}
 	}
-	void executeAction(Action ac)
+	void executeAction(size_t ac, int param = 0) { executeAction((Action) ac, param); }
+	void executeAction(Action ac, int param = 0)
 	{
 		if (ac == SinFunc)
 		{
@@ -64,7 +76,14 @@ public:
 		{
 			for (int i = 0; i < WAVESIZE; i++)
 			{
-				mWave[i] = (float) (i*2/WAVESIZE);
+				mWave[i] = (float) (1-2*(i*2/WAVESIZE));
+			}
+		} else if (ac == TriFunc)
+		{
+			for (int i = 0; i < WAVESIZE; i++)
+			{
+				int imod = i % (WAVESIZE/2);
+				mWave[i] = (1-2*(i < WAVESIZE/2)) * std::abs(imod - (imod > (WAVESIZE/4))*(imod-WAVESIZE/4)*2) / ((float) (WAVESIZE/4));
 			}
 		} else if (ac == Reverse)
 		{
@@ -79,6 +98,31 @@ public:
 			for (int i = 0; i < WAVESIZE; i++)
 			{
 				mWave[i] = -mWave[i];
+			}
+		} else if (ac == MeanFilter) {
+			// Filtering with no neighbour range is meaningless.
+			if (param < 0) {
+				param = 1;
+			}
+
+			// Copy old wave
+			float oldWave[WAVESIZE];
+			for (int i = 0; i < WAVESIZE; i++) {
+				oldWave[i] = mWave[i];
+				mWave[i] = 0;
+			}
+			
+			// Calculate new wave
+			int range = param*2+1;
+			for (int i = 0; i < WAVESIZE; i++) {
+				for (int j = 0; j < range; j++) {
+					int from = (i-param+j) % WAVESIZE;
+					if (from < 0) {
+						from += WAVESIZE;
+					}
+					mWave[i] += oldWave[from];
+				}
+				mWave[i] /= range;
 			}
 		}
 	}
