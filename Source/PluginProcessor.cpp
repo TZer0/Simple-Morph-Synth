@@ -89,27 +89,14 @@ public:
 	}
 
 	void renderNextBlock (AudioSampleBuffer& outputBuffer, int startSample, int numSamples)
-	{
-		float fac = mSynth->mSourceFactor;
-		if (mAngleDelta != 0.0)
+	{		if (mAngleDelta != 0.0)
 		{
 
 			while (--numSamples >= 0)
 			{
 				float pos = (float) mCurrentAngle*WAVESIZE;
-				int curSampPos = (int) pos;
-				float posOffset = (float) pos-curSampPos;
-				float outVal = 0.f;
-				for (size_t i = 0; i < mSynth->mWaveTables.size(); i++)
-				{
-					WaveTable *table = mSynth->mWaveTables.at(i);
-					float from = table->mWave[curSampPos%WAVESIZE];
-					float to = table->mWave[(curSampPos+1)%WAVESIZE];
-					outVal += fac *(from*(1-posOffset) + to*posOffset);
-					fac = 1-fac;
-				}
 
-				const float currentSample = (float) (outVal * mLevel * (mTailOff > 0 ? mTailOff : 1));
+				const float currentSample = (float) (mSynth->getWaveValue(pos) * mLevel * (mTailOff > 0 ? mTailOff : 1));
 
 				for (int i = outputBuffer.getNumChannels(); --i >= 0;)
 					*outputBuffer.getSampleData (i, startSample) += currentSample;
@@ -144,9 +131,8 @@ SimpleMorphSynth::SimpleMorphSynth()
 	: mDelayBuffer (2, 12000)
 {
 	// Set up some default values..
-	mGain = 1.0f;
-	mDelay = 0.5f;
-	mSourceFactor = 0;
+	mSourceFactor = mSmoothStrengthFactor = mSmoothRangeFactor = 0;
+
 
 	mLastUIWidth = WINDOWWIDTH;
 	mLastUIHeight = WINDOWHEIGHT;
@@ -169,6 +155,42 @@ SimpleMorphSynth::SimpleMorphSynth()
 	mSynth.addSound (new WaveTableSound());
 
 }
+
+float SimpleMorphSynth::getWaveValue(float pos) {
+	int range = (int) mSmoothRangeFactor;
+	if (range < 1) {
+		range = 1;
+	}
+	int curSampPos = (int) pos;
+	float posOffset = (float) pos-curSampPos;
+	float outVal = 0.f;
+	float fac = mSourceFactor;
+	float regTotal = 0.0;
+	for (size_t i = 0; i < mWaveTables.size(); i++)
+	{
+		WaveTable *table = mWaveTables.at(i);
+		for (int j = -range; j <= range; j++)
+		{
+			int aPos = (curSampPos+j)%WAVESIZE;
+			if (aPos < 0) {
+				aPos += WAVESIZE;
+			}
+			float from = table->mWave[aPos];
+			float to = table->mWave[(aPos+1)%WAVESIZE];
+			float smooth = (range-std::abs(j)*mSmoothStrengthFactor);
+			regTotal += smooth;
+			outVal += fac *(from*(1-posOffset) + to*posOffset) * smooth * 2;
+		}
+		
+		fac = 1-fac;
+	}
+	if (regTotal > 0.1f) {
+		outVal /= regTotal;
+	}
+
+	return outVal;
+}
+
 SimpleMorphSynth::~SimpleMorphSynth()
 {
 	for (size_t i = 0; i < mWaveTables.size(); i++) {
@@ -204,7 +226,7 @@ WaveTable *SimpleMorphSynth::getWaveTable(size_t table)
 //==============================================================================
 int SimpleMorphSynth::getNumParameters()
 {
-	return totalNumParams;
+	return TotalNumParams;
 }
 
 float SimpleMorphSynth::getParameter (int index)
@@ -214,13 +236,27 @@ float SimpleMorphSynth::getParameter (int index)
 	// UI-related, or anything at all that may block in any way!
 	switch (index)
 	{
-	case gainParam:     return mGain;
-	case delayParam:    return mDelay;
-	case sourceParam:    return mSourceFactor;
+	case SourceParam:    return mSourceFactor;
 
 	default:            return 0.0f;
 	}
 }
+
+const String SimpleMorphSynth::getParameterName (int index)
+{
+	switch (index)
+	{
+	case SourceParam:   return "Source";
+	case SmoothStrengthParam:	return "SmoothStrength";
+	case SmoothRangeParam:	return "SmoothRange";
+
+
+	default:            break;
+	}
+
+	return "Undefined parameter name.";
+}
+
 
 void SimpleMorphSynth::setParameter (int index, float newValue)
 {
@@ -229,26 +265,14 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 	// UI-related, or anything at all that may block in any way!
 	switch (index)
 	{
-	case gainParam:     mGain = newValue;  break;
-	case delayParam:    mDelay = newValue;  break;
-	case sourceParam:		mSourceFactor = newValue; break;
+	case SourceParam:		mSourceFactor = newValue; break;
+	case SmoothStrengthParam:		mSmoothStrengthFactor = newValue; break;
+	case SmoothRangeParam:		mSmoothRangeFactor = newValue; break;
+
 	default:            break;
 	}
 }
 
-const String SimpleMorphSynth::getParameterName (int index)
-{
-	switch (index)
-	{
-	case gainParam:     return "gain";
-	case delayParam:    return "delay";
-	case sourceParam:    return "source";
-
-	default:            break;
-	}
-
-	return String::empty;
-}
 
 const String SimpleMorphSynth::getParameterText (int index)
 {
@@ -286,7 +310,7 @@ void SimpleMorphSynth::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midi
 
 	// Go through the incoming data, and apply our gain to it...
 	for (channel = 0; channel < getNumInputChannels(); ++channel)
-		buffer.applyGain (channel, 0, buffer.getNumSamples(), mGain);
+		buffer.applyGain (channel, 0, buffer.getNumSamples(), 1);
 
 	// Now pass any incoming midi messages to our keyboard state object, and let it
 	// add messages to the buffer if the user is clicking on the on-screen keys
@@ -296,7 +320,7 @@ void SimpleMorphSynth::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midi
 	mSynth.renderNextBlock (buffer, midiMessages, 0, numSamples);
 
 	// Apply our delay effect to the new output..
-	for (channel = 0; channel < getNumInputChannels(); ++channel)
+	/*for (channel = 0; channel < getNumInputChannels(); ++channel)
 	{
 		float* channelData = buffer.getSampleData (channel);
 		float* delayData = mDelayBuffer.getSampleData (jmin (channel, mDelayBuffer.getNumChannels() - 1));
@@ -306,11 +330,11 @@ void SimpleMorphSynth::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midi
 		{
 			const float in = channelData[i];
 			channelData[i] += delayData[dp];
-			delayData[dp] = (delayData[dp] + in) * mDelay;
+			delayData[dp] = (delayData[dp] + in);
 			if (++dp >= mDelayBuffer.getNumSamples())
 				dp = 0;
 		}
-	}
+	}*/
 
 	mDelayPosition = dp;
 
@@ -347,14 +371,9 @@ void SimpleMorphSynth::getStateInformation (MemoryBlock& destData)
 	// You should use this method to store your parameters in the memory block.
 	// Here's an example of how you can use XML to make it easy and more robust:
 
-	// Create an outer XML element..
-	XmlElement xml ("MYPLUGINSETTINGS");
+	XmlElement xml ("SIMPLEMORPHSSYNTH");
 
-	// add some attributes to it..
-	xml.setAttribute ("uiWidth", mLastUIWidth);
-	xml.setAttribute ("uiHeight", mLastUIHeight);
-	xml.setAttribute ("gain", mGain);
-	xml.setAttribute ("delay", mDelay);
+	xml.setAttribute ("mSourceFactor", mSourceFactor);
 
 	// then use this helper function to stuff it into the binary blob and return it..
 	copyXmlToBinary (xml, destData);
@@ -370,15 +389,9 @@ void SimpleMorphSynth::setStateInformation (const void* data, int sizeInBytes)
 
 	if (xmlState != nullptr)
 	{
-		// make sure that it's actually our type of XML object..
-		if (xmlState->hasTagName ("MYPLUGINSETTINGS"))
+		if (xmlState->hasTagName ("SIMPLEMORPHSSYNTH"))
 		{
-			// ok, now pull out our parameters..
-			mLastUIWidth  = xmlState->getIntAttribute ("uiWidth", mLastUIWidth);
-			mLastUIHeight = xmlState->getIntAttribute ("uiHeight", mLastUIHeight);
-
-			mGain  = (float) xmlState->getDoubleAttribute ("gain", mGain);
-			mDelay = (float) xmlState->getDoubleAttribute ("delay", mDelay);
+			mSourceFactor  = (float) xmlState->getDoubleAttribute ("mSourceFactor", mSourceFactor);
 		}
 	}
 }

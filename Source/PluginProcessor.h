@@ -35,7 +35,19 @@ enum Action
 	MeanFilter
 };
 
+enum Parameter
+{
+	SourceParam = 0,
+	SmoothStrengthParam,
+	SmoothRangeParam,
+
+    TotalNumParams,
+	NoneParam
+};
+
 juce::String convertActionToString(int act);
+String getParameterName (int index);
+
 
 class WaveTable
 {
@@ -83,7 +95,7 @@ public:
 			for (int i = 0; i < WAVESIZE; i++)
 			{
 				int imod = i % (WAVESIZE/2);
-				mWave[i] = (1-2*(i < WAVESIZE/2)) * std::abs(imod - (imod > (WAVESIZE/4))*(imod-WAVESIZE/4)*2) / ((float) (WAVESIZE/4));
+				mWave[i] = (1-2*(i > WAVESIZE/2)) * std::abs(imod - (imod > (WAVESIZE/4))*(imod-WAVESIZE/4)*2) / ((float) (WAVESIZE/4));
 			}
 		} else if (ac == Reverse)
 		{
@@ -157,7 +169,7 @@ public:
     int getNumParameters();
     float getParameter (int index);
     void setParameter (int index, float newValue);
-    const String getParameterName (int index);
+	const String getParameterName (int index);
     const String getParameterText (int index);
 
     const String getInputChannelName (int channelIndex) const;
@@ -181,6 +193,7 @@ public:
 	size_t getNumTables() { return mWaveTables.size(); }
 
 	float getWaveTableValue(size_t table, int pos);
+	float getWaveValue(float pos);
 
     //==============================================================================
     void getStateInformation (MemoryBlock& destData);
@@ -205,18 +218,9 @@ public:
     int mLastUIWidth, mLastUIHeight;
 
     //==============================================================================
-    enum Parameters
-    {
-        gainParam = 0,
-        delayParam,
-		sourceParam,
 
-        totalNumParams
-    };
-
-    float mGain, mDelay;
 	std::vector<WaveTable *> mWaveTables;
-	float mSourceFactor;
+	float mSourceFactor, mSmoothStrengthFactor, mSmoothRangeFactor;
 
 private:
     //==============================================================================
