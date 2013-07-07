@@ -14,69 +14,79 @@
 //==============================================================================
 SimpleMorphSynthProcessorEditor::SimpleMorphSynthProcessorEditor (SimpleMorphSynth* ownerFilter)
     : AudioProcessorEditor (ownerFilter),
-      mMidiKeyboard (ownerFilter->mKeyboardState, MidiKeyboardComponent::horizontalKeyboard),
-      mInfoLabel (String::empty),
-      mGainLabel ("", "Throughput level:"),
-      mDelayLabel ("", "Delay:"),
-	  mSourceLabel("", "Source Selection:"),
-      mGainSlider ("gain"),
-      mDelaySlider ("delay"),
-	  mSourceSlider("Source")
+      mMidiKeyboard (ownerFilter->mKeyboardState, MidiKeyboardComponent::horizontalKeyboard)
 {
-	// add some sliders..
-    addAndMakeVisible (&mGainSlider);
-    mGainSlider.setSliderStyle (Slider::Rotary);
-    mGainSlider.addListener (this);
-    mGainSlider.setRange (0.0, 1.0, 0.01);
-
-    addAndMakeVisible (&mDelaySlider);
-    mDelaySlider.setSliderStyle (Slider::Rotary);
-    mDelaySlider.addListener (this);
-    mDelaySlider.setRange (0.0, 1.0, 0.01);
-
-	addAndMakeVisible(&mSourceSlider);
-	mSourceSlider.setSliderStyle(Slider::LinearVertical);
-	mSourceSlider.addListener(this);
-	mSourceSlider.setRange(0.0, 1.0, 0.01);
-	mSourceSlider.setValue(0);
-	mSourceSlider.repaint();
-
-
-    // add some labels for the sliders..
-    mGainLabel.attachToComponent (&mGainSlider, false);
-    mGainLabel.setFont (Font (11.0f));
-
-    mDelayLabel.attachToComponent (&mDelaySlider, false);
-    mDelayLabel.setFont (Font (11.0f));
-
-	mSourceLabel.attachToComponent (&mSourceSlider, false);
-    mSourceLabel.setFont (Font (11.0f));
+	
 
     // add the midi keyboard component..
-    addAndMakeVisible (&mMidiKeyboard);
-
-    // add a label that will display the current timecode and status..
-    addAndMakeVisible (&mInfoLabel);
-    mInfoLabel.setColour (Label::textColourId, Colours::blue);
-
-    // add the triangular resizer component for the bottom-right of the UI
-    addAndMakeVisible (mResizer = new ResizableCornerComponent (this, &mResizeLimits));
-    mResizeLimits.setSizeLimits (700, 610, 700, 610);
+    //addAndMakeVisible (&mMidiKeyboard);
 
     // set our component's initial size to be the last one that was stored in the filter's settings
     setSize (ownerFilter->mLastUIWidth,
              ownerFilter->mLastUIHeight);
+	addSlider(SourceParam, juce::Point<int>(390, 20), juce::Point<int>(20, (int) WAVEHEIGHT*2-40));
+	addSlider(SmoothStrengthParam, juce::Point<int>(380, 450), juce::Point<int>(20, 100));
+	addSlider(SmoothRangeParam, juce::Point<int>(400, 450), juce::Point<int>(20, 100), 1., 16.);
+	addSlider(AdjustPhaseParam, juce::Point<int>(100, (int) WAVEHEIGHT*2), juce::Point<int>(WAVESIZE-200, 20), -10, 10, 0, juce::Slider::SliderStyle::LinearHorizontal);
+	addSlider(AdjustPhaseParam, juce::Point<int>(600, (int) WAVEHEIGHT*2), juce::Point<int>(WAVESIZE-200, 20), -10, 10, 1, juce::Slider::SliderStyle::LinearHorizontal);
+
+	for (int i = 0; i < 2; i++) {
+		for (int j = 0; j <= LASTRADIOACTION; j++) {
+			juce::ToggleButton *button = new juce::ToggleButton(convertActionToString(j));
+			button->setRadioGroupId(i + 1);
+			button->addListener(this);
+			addAndMakeVisible(button);
+			mButtons.push_back(button);
+		}
+	}
+
 	mWaveClicked = -1;
-    startTimer (50);
+	mDraggingSlider = nullptr;
+    startTimer (10);
+	resized();
+}
+
+void SimpleMorphSynthProcessorEditor::addSlider(Parameter param, juce::Point<int> point, 
+				juce::Point<int> size, double minVal, double maxVal, int target, juce::Slider::SliderStyle style)
+{
+	ComponentContainer cont;
+	cont.mParam = param;
+	cont.mLabel = new Label(getProcessor()->getParameterName(param));
+	cont.mTarget = target;
+	Slider *sl = new Slider();
+	sl->setBounds(point.getX(), point.getY(), size.getX(), size.getY());
+
+	addAndMakeVisible(sl);
+	sl->setSliderStyle(style);
+	sl->setTextBoxStyle(juce::Slider::TextEntryBoxPosition::NoTextBox, false, 0, 0);
+	sl->addListener(this);
+	sl->setRange(minVal, maxVal, 0.01);
+	sl->setValue(0);
+
+	cont.mComponent = sl;
+
+	cont.mLabel->attachToComponent (sl, false);
+	cont.mLabel->setFont (Font (11.0f));
+	addAndMakeVisible(cont.mLabel);
+
+	mSliders.push_back(cont);
 }
 
 void SimpleMorphSynthProcessorEditor::mouseDown(const MouseEvent &event) {
 	mLastDrag = event.getPosition().toFloat();
 	mWaveClicked = checkIfInWavetable((int)mLastDrag.getX(), (int)mLastDrag.getY());
+	if (mWaveClicked != -1) {
+		size_t i = LASTRADIOACTION + mWaveClicked*(LASTRADIOACTION + 1);
+		mButtons[i]->triggerClick();
+	}
 }
 
 void SimpleMorphSynthProcessorEditor::mouseUp(const MouseEvent &) {
 	mWaveClicked = -1;
+	if (mDraggingSlider != nullptr) {
+		mDraggingSlider->setValue(0);
+	}
+	mDraggingSlider = nullptr;
 }
 
 void SimpleMorphSynthProcessorEditor::mouseDrag(const MouseEvent &event) {
@@ -101,55 +111,86 @@ void SimpleMorphSynthProcessorEditor::mouseDrag(const MouseEvent &event) {
 
 int SimpleMorphSynthProcessorEditor::checkIfInWavetable(int x, int y, int forceTable) {
 	size_t numTables = getProcessor()->getNumTables();
-	x-=300;
-	if (x < WAVESIZE && x >= 0) {
-		for (size_t i = 0; i < numTables; i++) {
-			if ((y < WAVEHEIGHT*2 && y >= 0 && forceTable == -1 )|| (forceTable != -1 && ((size_t) forceTable) == i)) {
-				getProcessor()->setWaveTableValue(i, x, ((float) -y+WAVEHEIGHT)/WAVEHEIGHT);
-				return i;
-			}
-			y -= (int) (WAVEHEIGHT * 2.f + TABLESPACING);
+	for (size_t i = 0; i < numTables; i++) {
+		juce::Point<float> table = OscPoints[i];
+		int tx = (int) (x - table.getX()); int ty = (int) (y - table.getY());
+		if ((0 <= tx && tx < WAVESIZE && 0 <= ty && ty < WAVEHEIGHT*2 && forceTable == -1 ) 
+					|| (forceTable != -1 && ((size_t) forceTable) == i)) {
+			getProcessor()->setWaveTableValue(i, tx, ((float) -ty+WAVEHEIGHT)/WAVEHEIGHT);
+			return i;
 		}
-
 	}
+
 	return -1;
 }
 
 SimpleMorphSynthProcessorEditor::~SimpleMorphSynthProcessorEditor()
 {
+	for (size_t i = 0; i < mButtons.size(); i++) {
+		delete mButtons[i];
+	}
+
+	for (size_t i =0; i < mSliders.size(); i++) {
+		delete mSliders[i].mComponent;
+		delete mSliders[i].mLabel;
+	}
 }
 
 //==============================================================================
 void SimpleMorphSynthProcessorEditor::paint (Graphics& g)
 {
-    g.setGradientFill (ColourGradient (Colours::white, 0, 0, Colours::grey, 0, (float) getHeight(), false));
+	SimpleMorphSynth *synth = getProcessor();
+	g.setColour(juce::Colour(28, 44, 45));
 	g.fillAll();
 	size_t tables = getProcessor()->getNumTables();
-	float yStart = WAVEHEIGHT;
+
+	float source = getProcessor()->getParameter(SourceParam);
 
 	for (size_t t = 0; t < tables; t++) {
-		g.setColour(Colours::black);
-		g.fillRect(300.f, yStart-WAVEHEIGHT, (float) WAVESIZE, WAVEHEIGHT * 2);
+		juce::Point<float> oscPoint = OscPoints[t];
+		float x = oscPoint.getX(); float y = oscPoint.getY();
+		g.setColour(juce::Colour(31, 31, 31));
+		g.fillRect(x, y, (float) WAVESIZE, WAVEHEIGHT * 2);
+		g.setColour(juce::Colour(242, 164, 15));
+		y += WAVEHEIGHT;
 		for (int i = 0; i < WAVESIZE; i++) {
-			g.setColour(Colours::white);
-			g.fillRect(300.f+i, yStart, 1.f, -getProcessor()->getWaveTableValue(t, i)*WAVEHEIGHT);
+			float waveVal = getProcessor()->getWaveTableValue(t, i);
+			g.fillRect(x+i, y, 1.f, -waveVal*WAVEHEIGHT);
 		}
-		yStart += WAVEHEIGHT*2 + TABLESPACING;
+		source = 1-source;
 	}
 
+
+	juce::Point<float> oscPoint = OscPoints[2];
+	float x = oscPoint.getX(); float y = oscPoint.getY();
+	g.setColour(juce::Colour(31, 31, 31));
+	g.fillRect(x, y, (float) WAVESIZE, WAVEHEIGHT*2);
+	g.setColour(juce::Colour(150, 10, 10));
+	y += WAVEHEIGHT;
+	for (int i = 0; i < WAVESIZE; i++) {
+		g.fillRect(x+i, y, 1.f, -synth->getWaveValue((float) i) * WAVEHEIGHT);
+	}
 }
 
 void SimpleMorphSynthProcessorEditor::resized()
 {
-    mInfoLabel.setBounds (10, 4, 400, 25);
-    mGainSlider.setBounds (20, 60, 150, 40);
-    mDelaySlider.setBounds (150, 60, 150, 40);
-	mSourceSlider.setBounds(50, 350, 20, 100);
 
     const int keyboardHeight = 70;
     mMidiKeyboard.setBounds (4, getHeight() - keyboardHeight - 4, 700-WAVESIZE-8, keyboardHeight);
 
-    mResizer->setBounds (getWidth() - 16, getHeight() - 16, 16, 16);
+	size_t k = 0;
+	for (int i = 0; i < 2; i++) {
+		juce::Point<int> buttonPoint = PresetFuncButtonPoints[i];
+		int x = buttonPoint.getX(); int y = buttonPoint.getY();
+
+		for (int j = 0; j <= LASTRADIOACTION; j++) {
+			if (mButtons.size() <= k) {
+				break;
+			}
+			mButtons[k]->setBounds(x, y+j*PRESETACTIONBUTTONSIZE, PRESETACTIONBUTTONSIZE+60, PRESETACTIONBUTTONSIZE);
+			k++;
+		}
+	}
 
     getProcessor()->mLastUIWidth = getWidth();
     getProcessor()->mLastUIHeight = getHeight();
@@ -163,91 +204,44 @@ void SimpleMorphSynthProcessorEditor::timerCallback()
 
     AudioPlayHead::CurrentPositionInfo newPos (ourProcessor->mLastPosInfo);
 
-    if (mLastDisplayedPosition != newPos)
-        displayPositionInfo (newPos);
-
-    mGainSlider.setValue (ourProcessor->mGain, dontSendNotification);
-    mDelaySlider.setValue (ourProcessor->mDelay, dontSendNotification);
+	if (mDraggingSlider != nullptr) {
+		//sliderValueChanged(mDraggingSlider);
+	}
 }
 
 // This is our Slider::Listener callback, when the user drags a slider.
 void SimpleMorphSynthProcessorEditor::sliderValueChanged (Slider* slider)
 {
-    if (slider == &mGainSlider)
-    {
-        // It's vital to use setParameterNotifyingHost to change any parameters that are automatable
-        // by the host, rather than just modifying them directly, otherwise the host won't know
-        // that they've changed.
-        getProcessor()->setParameterNotifyingHost (SimpleMorphSynth::gainParam,
-                                                   (float) mGainSlider.getValue());
-    }
-    else if (slider == &mDelaySlider)
-    {
-        getProcessor()->setParameterNotifyingHost (SimpleMorphSynth::delayParam,
-                                                   (float) mDelaySlider.getValue());
-    }
-	else if (slider == &mSourceSlider)
-	{
-		getProcessor()->setParameterNotifyingHost (SimpleMorphSynth::sourceParam,
-													(float) mSourceSlider.getValue());
+	for (size_t i = 0; i < mSliders.size(); i++) {
+	if (mSliders[i].mComponent == slider)
+		{
+			getProcessor()->setParameterNotifyingHost (mSliders[i].mParam + ((int)mSliders[i].mTarget)*(TotalNumParams-LASTCOMMONPARAM),
+														(float) slider->getValue());
+			if (mSliders[i].mParam == AdjustPhaseParam) {
+				mDraggingSlider = slider;
+				repaint();
+			}
+			repaint();
+		}
+	}
+}
+ 
+void SimpleMorphSynthProcessorEditor::buttonClicked(Button *button) {
+	size_t k = 0;
+	for (size_t i = 0; i < 2; i++) {
+		for (size_t j = 0; j <= LASTRADIOACTION; j++) {
+			if (mButtons.size() <= k) {
+				break;
+			}
+			if (mButtons[k] == button) {
+				getProcessor()->mWaveTables.at(i)->executeAction(j);
+				repaint();
+				return;
+			}
+			k++;
+		}
 	}
 }
 
-//==============================================================================
-// quick-and-dirty function to format a timecode string
-static const String timeToTimecodeString (const double seconds)
-{
-    const double absSecs = fabs (seconds);
-
-    const int hours =  (int) (absSecs / (60.0 * 60.0));
-    const int mins  = ((int) (absSecs / 60.0)) % 60;
-    const int secs  = ((int) absSecs) % 60;
-
-    String s (seconds < 0 ? "-" : "");
-
-    s << String (hours).paddedLeft ('0', 2) << ":"
-      << String (mins) .paddedLeft ('0', 2) << ":"
-      << String (secs) .paddedLeft ('0', 2) << ":"
-      << String (roundToInt (absSecs * 1000) % 1000).paddedLeft ('0', 3);
-
-    return s;
-}
-
-// quick-and-dirty function to format a bars/beats string
-static const String ppqToBarsBeatsString (double ppq, double /*lastBarPPQ*/, int numerator, int denominator)
-{
-    if (numerator == 0 || denominator == 0)
-        return "1|1|0";
-
-    const int ppqPerBar = (numerator * 4 / denominator);
-    const double beats  = (fmod (ppq, ppqPerBar) / ppqPerBar) * numerator;
-
-    const int bar    = ((int) ppq) / ppqPerBar + 1;
-    const int beat   = ((int) beats) + 1;
-    const int ticks  = ((int) (fmod (beats, 1.0) * 960.0 + 0.5));
-
-    String s;
-    s << bar << '|' << beat << '|' << ticks;
-    return s;
-}
-
-// Updates the text in our position label.
-void SimpleMorphSynthProcessorEditor::displayPositionInfo (const AudioPlayHead::CurrentPositionInfo& pos)
-{
-    mLastDisplayedPosition = pos;
-    String displayText;
-    displayText.preallocateBytes (128);
-
-    displayText << String (pos.bpm, 2) << " bpm, "
-                << pos.timeSigNumerator << '/' << pos.timeSigDenominator
-                << "  -  " << timeToTimecodeString (pos.timeInSeconds)
-                << "  -  " << ppqToBarsBeatsString (pos.ppqPosition, pos.ppqPositionOfLastBarStart,
-				pos.timeSigNumerator, pos.timeSigDenominator);
-
-    if (pos.isRecording)
-        displayText << "  (recording)";
-    else if (pos.isPlaying)
-        displayText << "  (playing)";
-
-    mInfoLabel.setText (displayText, dontSendNotification);
+void SimpleMorphSynthProcessorEditor::buttonStateChanged(Button *button) {
 }
