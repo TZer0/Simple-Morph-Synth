@@ -237,7 +237,7 @@ float SimpleMorphSynth::getParameter (int index)
 {
 	int target = 0;
 	if (index >= LastParam) {
-		index = index - LastParam + LASTCOMMONPARAM + 1;
+		index = index - SYNTHPARAMS;
 		target++;
 	}
 	// This method will be called by the host, probably on the audio thread, so
@@ -264,7 +264,7 @@ const String SimpleMorphSynth::getParameterName (int index)
 {
 	int target = 0;
 	if (index >= LastParam) {
-		index = index - LastParam + LASTCOMMONPARAM + 1;
+		index = index - SYNTHPARAMS;
 		target++;
 	}
 	juce::String tOsc =  juce::String(target+1);
@@ -294,7 +294,7 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 {
 	int target = 0;
 	if (index >= LastParam) {
-		index = index - LastParam + LASTCOMMONPARAM + 1;
+		index = index - SYNTHPARAMS;
 		target++;
 	}
 	// This method will be called by the host, probably on the audio thread, so
@@ -321,7 +321,8 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 	case SynthSustainParam:			mADSRTables.at(target)->mSustain = newValue; break;
 	case SynthDecayParam:			mADSRTables.at(target)->mDecay = newValue; break;
 	case SynthReleaseParam:			mADSRTables.at(target)->mRelease = newValue; break;
-	default:    break;
+	default:   break;
+
 	}
 }
 

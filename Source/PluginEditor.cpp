@@ -27,10 +27,10 @@ SimpleMorphSynthProcessorEditor::SimpleMorphSynthProcessorEditor (SimpleMorphSyn
 	addSlider(SourceParam, juce::Point<int>(390, 20), juce::Point<int>(20, (int) WAVEHEIGHT-40));
 	addSlider(SmoothStrengthParam, juce::Point<int>(380, 424), juce::Point<int>(16, 72));
 	addSlider(SmoothRangeParam, juce::Point<int>(400, 424), juce::Point<int>(16, 72), 1., 16.);
-	addSlider(AdjustPhaseParam, OscPoints[0].toInt() + juce::Point<int>((int) (OSCBOXWIDTH/2-PHASESLIDERWIDTH/2), 
-		(int) OSCBOXHEIGHT), juce::Point<int>(PHASESLIDERWIDTH, 20), -10, 10, 0, juce::Slider::SliderStyle::LinearHorizontal);
+	addSlider(AdjustPhaseParam, OscPoints[0].toInt() + juce::Point<int>((int) (OSCBOXWIDTH/2), 
+		(int) OSCBOXHEIGHT), juce::Point<int>(PHASESLIDERWIDTH, 20), -5, 5, 0, juce::Slider::SliderStyle::LinearHorizontal);
 	addSlider(AdjustPhaseParam, OscPoints[1].toInt() + juce::Point<int>((int) (OSCBOXWIDTH/2-PHASESLIDERWIDTH/2), 
-		(int) OSCBOXHEIGHT), juce::Point<int>(PHASESLIDERWIDTH, 20), -10, 10, 1, juce::Slider::SliderStyle::LinearHorizontal);
+		(int) OSCBOXHEIGHT), juce::Point<int>(PHASESLIDERWIDTH, 20), -5, 5, 1, juce::Slider::SliderStyle::LinearHorizontal);
 
 	for (int i = AmpAttackParam; i <= AmpReleaseParam; i++) {
 		addSlider((Parameter) i, ADSRPoints[2]+juce::Point<int>((i-AmpAttackParam)*ADSRSPACING, 0), 
@@ -93,17 +93,12 @@ void SimpleMorphSynthProcessorEditor::mouseDown(const MouseEvent &event) {
 	mLastDrag = event.getPosition().toFloat();
 	mWaveClicked = checkIfInWavetable((int)mLastDrag.getX(), (int)mLastDrag.getY());
 	if (mWaveClicked != -1) {
-		size_t i = LASTRADIOACTION + mWaveClicked*(LASTRADIOACTION + 1);
-		mButtons[i]->triggerClick();
+		checkUserWaveBox(mWaveClicked);
 	}
 }
 
 void SimpleMorphSynthProcessorEditor::mouseUp(const MouseEvent &) {
 	mWaveClicked = -1;
-	if (mDraggingSlider != nullptr) {
-		mDraggingSlider->setValue(0);
-	}
-	mDraggingSlider = nullptr;
 }
 
 void SimpleMorphSynthProcessorEditor::mouseDrag(const MouseEvent &event) {
@@ -234,7 +229,7 @@ void SimpleMorphSynthProcessorEditor::timerCallback()
     AudioPlayHead::CurrentPositionInfo newPos (ourProcessor->mLastPosInfo);
 
 	if (mDraggingSlider != nullptr) {
-		//sliderValueChanged(mDraggingSlider);
+		sliderValueChanged(mDraggingSlider);
 	}
 }
 
@@ -244,17 +239,35 @@ void SimpleMorphSynthProcessorEditor::sliderValueChanged (Slider* slider)
 	for (size_t i = 0; i < mSliders.size(); i++) {
 	if (mSliders[i].mComponent == slider)
 		{
-			getProcessor()->setParameterNotifyingHost (mSliders[i].mParam + ((int)mSliders[i].mTarget)*(LastParam-LASTCOMMONPARAM),
-														(float) slider->getValue());
-			if (mSliders[i].mParam == AdjustPhaseParam) {
+			
+			if (mSliders[i].mParam == AdjustPhaseParam && std::abs(slider->getValue()) > 0.1 ) {
 				mDraggingSlider = slider;
-				repaint();
+				checkUserWaveBox(mSliders[i].mTarget);
 			}
-			slider->repaint();
+			getProcessor()->setParameterNotifyingHost (mSliders[i].mParam + ((int)mSliders[i].mTarget)*SYNTHPARAMS,
+									(float) slider->getValue());
+
 			repaint();
 		}
 	}
 }
+
+void SimpleMorphSynthProcessorEditor::checkUserWaveBox(int target) {
+	if (target < 0 || 1 < target) {
+		return;
+	}
+	size_t i = LASTRADIOACTION + target*(LASTRADIOACTION + 1);
+	mButtons[i]->triggerClick();
+}
+
+void SimpleMorphSynthProcessorEditor::sliderDragEnded (Slider *)
+{
+	if (mDraggingSlider != nullptr) {
+		mDraggingSlider->setValue(0);
+		mDraggingSlider = nullptr;
+	}
+}
+
  
 void SimpleMorphSynthProcessorEditor::buttonClicked(Button *button) {
 	size_t k = 0;

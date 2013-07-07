@@ -68,6 +68,7 @@ public:
     void paint (Graphics& g);
     void resized();
     void sliderValueChanged (Slider*);
+	void sliderDragEnded (Slider *);
 	void mouseUp(const MouseEvent &event);
 	void mouseDown(const MouseEvent &event);
 	void mouseDrag(const MouseEvent &event);
@@ -87,6 +88,7 @@ private:
 	void buttonStateChanged(Button *);
 	void addSlider(Parameter param, juce::Point<int> point, juce::Point<int> size, double minVal = 0.0, double maxVal = 1.0, int target = 0,
 		juce::Slider::SliderStyle style = juce::Slider::SliderStyle::LinearVertical);
+	void checkUserWaveBox(int target);
 	
     SimpleMorphSynth* getProcessor() const
     {
