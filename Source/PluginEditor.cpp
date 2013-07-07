@@ -24,11 +24,28 @@ SimpleMorphSynthProcessorEditor::SimpleMorphSynthProcessorEditor (SimpleMorphSyn
     // set our component's initial size to be the last one that was stored in the filter's settings
     setSize (ownerFilter->mLastUIWidth,
              ownerFilter->mLastUIHeight);
-	addSlider(SourceParam, juce::Point<int>(390, 20), juce::Point<int>(20, (int) WAVEHEIGHT*2-40));
-	addSlider(SmoothStrengthParam, juce::Point<int>(380, 450), juce::Point<int>(20, 100));
-	addSlider(SmoothRangeParam, juce::Point<int>(400, 450), juce::Point<int>(20, 100), 1., 16.);
-	addSlider(AdjustPhaseParam, juce::Point<int>(100, (int) WAVEHEIGHT*2), juce::Point<int>(WAVESIZE-200, 20), -10, 10, 0, juce::Slider::SliderStyle::LinearHorizontal);
-	addSlider(AdjustPhaseParam, juce::Point<int>(600, (int) WAVEHEIGHT*2), juce::Point<int>(WAVESIZE-200, 20), -10, 10, 1, juce::Slider::SliderStyle::LinearHorizontal);
+	addSlider(SourceParam, juce::Point<int>(390, 20), juce::Point<int>(20, (int) WAVEHEIGHT-40));
+	addSlider(SmoothStrengthParam, juce::Point<int>(380, 424), juce::Point<int>(16, 72));
+	addSlider(SmoothRangeParam, juce::Point<int>(400, 424), juce::Point<int>(16, 72), 1., 16.);
+	addSlider(AdjustPhaseParam, OscPoints[0].toInt() + juce::Point<int>((int) (OSCBOXWIDTH/2-PHASESLIDERWIDTH/2), 
+		(int) OSCBOXHEIGHT), juce::Point<int>(PHASESLIDERWIDTH, 20), -10, 10, 0, juce::Slider::SliderStyle::LinearHorizontal);
+	addSlider(AdjustPhaseParam, OscPoints[1].toInt() + juce::Point<int>((int) (OSCBOXWIDTH/2-PHASESLIDERWIDTH/2), 
+		(int) OSCBOXHEIGHT), juce::Point<int>(PHASESLIDERWIDTH, 20), -10, 10, 1, juce::Slider::SliderStyle::LinearHorizontal);
+
+	for (int i = AmpAttackParam; i <= AmpReleaseParam; i++) {
+		addSlider((Parameter) i, ADSRPoints[2]+juce::Point<int>((i-AmpAttackParam)*ADSRSPACING, 0), 
+			juce::Point<int>(ADSRWIDTH, ADSRHEIGHT));
+	}
+
+	TabbedComponent *tabbedComponent;
+	addAndMakeVisible (tabbedComponent = new TabbedComponent (TabbedButtonBar::TabsAtTop));
+    tabbedComponent->setTabBarDepth (30);
+    tabbedComponent->addTab ("Tab 0", Colour (0xff3e5659), 0, false);
+    tabbedComponent->addTab ("Tab 1", Colour (0xff314548), 0, false);
+    tabbedComponent->addTab ("Tab 2", Colour (0xff314548), 0, false);
+	    tabbedComponent->setCurrentTabIndex (0);
+	tabbedComponent->setBounds (TabbedComponentPoints[0].getX(), TabbedComponentPoints[0].getY(), TABBOXWIDTH, TABOXHEIGHT);
+
 
 	for (int i = 0; i < 2; i++) {
 		for (int j = 0; j <= LASTRADIOACTION; j++) {
@@ -114,9 +131,9 @@ int SimpleMorphSynthProcessorEditor::checkIfInWavetable(int x, int y, int forceT
 	for (size_t i = 0; i < numTables; i++) {
 		juce::Point<float> table = OscPoints[i];
 		int tx = (int) (x - table.getX()); int ty = (int) (y - table.getY());
-		if ((0 <= tx && tx < WAVESIZE && 0 <= ty && ty < WAVEHEIGHT*2 && forceTable == -1 ) 
+		if ((0 <= tx && tx < WAVESIZE && 0 <= ty && ty < WAVEHEIGHT && forceTable == -1 ) 
 					|| (forceTable != -1 && ((size_t) forceTable) == i)) {
-			getProcessor()->setWaveTableValue(i, tx, ((float) -ty+WAVEHEIGHT)/WAVEHEIGHT);
+			getProcessor()->setWaveTableValue(i, tx, ((float) -ty+(WAVEHEIGHT/2))/(WAVEHEIGHT/2));
 			return i;
 		}
 	}
@@ -140,36 +157,48 @@ SimpleMorphSynthProcessorEditor::~SimpleMorphSynthProcessorEditor()
 void SimpleMorphSynthProcessorEditor::paint (Graphics& g)
 {
 	SimpleMorphSynth *synth = getProcessor();
-	g.setColour(juce::Colour(28, 44, 45));
+	g.setColour(BACKGROUND);
 	g.fillAll();
 	size_t tables = getProcessor()->getNumTables();
-
-	float source = getProcessor()->getParameter(SourceParam);
 
 	for (size_t t = 0; t < tables; t++) {
 		juce::Point<float> oscPoint = OscPoints[t];
 		float x = oscPoint.getX(); float y = oscPoint.getY();
-		g.setColour(juce::Colour(31, 31, 31));
-		g.fillRect(x, y, (float) WAVESIZE, WAVEHEIGHT * 2);
-		g.setColour(juce::Colour(242, 164, 15));
-		y += WAVEHEIGHT;
+		g.setColour(COMPBACKGROUND);
+		g.fillRect(x-OSCBOXOFFSET, y-OSCBOXOFFSET, OSCBOXWIDTH, OSCBOXHEIGHT);
+		g.setColour(TABLEBACKGROUND);
+		
+		g.fillRect(x, y, (float) WAVESIZE, (WAVEHEIGHT/2) * 2);
+		g.setGradientFill(juce::ColourGradient(OSCOUTPUT1, x, y, OSCOUTPUT2, x, y+WAVEHEIGHT, false));
+		y += (WAVEHEIGHT/2);
+		juce::Path pth;
+		pth.startNewSubPath(x, y);
 		for (int i = 0; i < WAVESIZE; i++) {
 			float waveVal = getProcessor()->getWaveTableValue(t, i);
-			g.fillRect(x+i, y, 1.f, -waveVal*WAVEHEIGHT);
+			pth.lineTo(x+i, y-waveVal*(WAVEHEIGHT/2));
 		}
-		source = 1-source;
+		pth.lineTo(x+WAVESIZE, y);
+		g.fillPath(pth);
 	}
 
 
 	juce::Point<float> oscPoint = OscPoints[2];
 	float x = oscPoint.getX(); float y = oscPoint.getY();
-	g.setColour(juce::Colour(31, 31, 31));
-	g.fillRect(x, y, (float) WAVESIZE, WAVEHEIGHT*2);
-	g.setColour(juce::Colour(150, 10, 10));
-	y += WAVEHEIGHT;
-	for (int i = 0; i < WAVESIZE; i++) {
-		g.fillRect(x+i, y, 1.f, -synth->getWaveValue((float) i) * WAVEHEIGHT);
+	g.setColour(TABLEBACKGROUND);
+	g.fillRect(x, y, (float) OUTPUTWIDTH, (float) OUTPUTHEIGHT);
+	g.setGradientFill(juce::ColourGradient(MAINOUTPUT1, x, y, MAINOUTPUT2, x, y+OUTPUTHEIGHT, false));
+	y += OUTPUTHEIGHT/2;
+	juce::Path pth;
+	pth.startNewSubPath(x, y);
+	for (int i = 0; i < OUTPUTWIDTH; i++) {
+		pth.lineTo(x+i, y - synth->getWaveValue(i*(WAVESIZE/((float)OUTPUTWIDTH))) * (OUTPUTHEIGHT/2));
 	}
+	pth.lineTo(x+OUTPUTWIDTH, y);
+	g.fillPath(pth);
+
+	g.setColour(COMPBACKGROUND);
+	g.fillRect(WINDOWOFFSET, BUTTOMBOXY, WINDOWWIDTH-WINDOWOFFSET*2, WINDOWHEIGHT-BUTTOMBOXY-WINDOWOFFSET);
+
 }
 
 void SimpleMorphSynthProcessorEditor::resized()
@@ -215,12 +244,13 @@ void SimpleMorphSynthProcessorEditor::sliderValueChanged (Slider* slider)
 	for (size_t i = 0; i < mSliders.size(); i++) {
 	if (mSliders[i].mComponent == slider)
 		{
-			getProcessor()->setParameterNotifyingHost (mSliders[i].mParam + ((int)mSliders[i].mTarget)*(TotalNumParams-LASTCOMMONPARAM),
+			getProcessor()->setParameterNotifyingHost (mSliders[i].mParam + ((int)mSliders[i].mTarget)*(LastParam-LASTCOMMONPARAM),
 														(float) slider->getValue());
 			if (mSliders[i].mParam == AdjustPhaseParam) {
 				mDraggingSlider = slider;
 				repaint();
 			}
+			slider->repaint();
 			repaint();
 		}
 	}

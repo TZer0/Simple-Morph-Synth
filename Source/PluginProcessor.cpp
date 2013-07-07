@@ -148,6 +148,10 @@ SimpleMorphSynth::SimpleMorphSynth()
 	mWaveTables.push_back(sawT);
 	mWaveTables.push_back(sinT);
 
+	for (int i = 0; i < 3; i++) {
+		mADSRTables.push_back(new ADSRTable());
+	}
+
 	// Initialise the synth...
 	for (int i = 4; --i >= 0;)
 		mSynth.addVoice (new WaveTableVoice(this));   // These voices will play our custom sine-wave sounds..
@@ -226,11 +230,16 @@ WaveTable *SimpleMorphSynth::getWaveTable(size_t table)
 //==============================================================================
 int SimpleMorphSynth::getNumParameters()
 {
-	return TotalNumParams;
+	return TOTALNUMPARAMS;
 }
 
 float SimpleMorphSynth::getParameter (int index)
 {
+	int target = 0;
+	if (index >= LastParam) {
+		index = index - LastParam + LASTCOMMONPARAM + 1;
+		target++;
+	}
 	// This method will be called by the host, probably on the audio thread, so
 	// it's absolutely time-critical. Don't use critical sections or anything
 	// UI-related, or anything at all that may block in any way!
@@ -239,6 +248,14 @@ float SimpleMorphSynth::getParameter (int index)
 	case SourceParam:    return mSourceFactor;
 	case SmoothStrengthParam:	return mSmoothStrengthFactor;
 	case SmoothRangeParam:	return mSmoothRangeFactor;
+	case AmpAttackParam:			return mADSRTables.at(2)->mAttack;
+	case AmpSustainParam:			return mADSRTables.at(2)->mSustain;
+	case AmpDecayParam:				return mADSRTables.at(2)->mDecay;
+	case AmpReleaseParam:			return mADSRTables.at(2)->mRelease;
+	case SynthAttackParam:			return mADSRTables.at(target)->mAttack;
+	case SynthSustainParam:			return mADSRTables.at(target)->mSustain;
+	case SynthDecayParam:			return mADSRTables.at(target)->mDecay;
+	case SynthReleaseParam:			return mADSRTables.at(target)->mRelease;
 	default:            return 0.0f;
 	}
 }
@@ -246,17 +263,25 @@ float SimpleMorphSynth::getParameter (int index)
 const String SimpleMorphSynth::getParameterName (int index)
 {
 	int target = 0;
-	if (index >= TotalNumParams) {
-		index -= TotalNumParams;
-		index += LASTCOMMONPARAM;
+	if (index >= LastParam) {
+		index = index - LastParam + LASTCOMMONPARAM + 1;
 		target++;
 	}
+	juce::String tOsc =  juce::String(target+1);
 	switch (index)
 	{
 	case SourceParam:   return "Source";
 	case SmoothStrengthParam:	return "SmoothStrength";
 	case SmoothRangeParam:	return "SmoothRange";
-	case AdjustPhaseParam: return juce::String("AdjustOSCPhase") + juce::String(target+1);
+	case AmpAttackParam:	return "AmpAttackParam";
+	case AmpDecayParam:	return "AmpDecayParam";
+	case AmpReleaseParam:	return "AmpReleaseParam";
+	case AmpSustainParam:	return "AmpSustainParam";
+	case AdjustPhaseParam: return juce::String("AdjustOSCPhase") + tOsc;
+	case SynthAttackParam: return juce::String("SynthAttackParam") + tOsc;
+	case SynthDecayParam: return juce::String("SyntDecayParam") + tOsc;
+	case SynthSustainParam: return juce::String("SynthSustainParam") + tOsc;
+	case SynthReleaseParam: return juce::String("SynthReleaseParam") + tOsc;
 
 	default:            break;
 	}
@@ -268,9 +293,8 @@ const String SimpleMorphSynth::getParameterName (int index)
 void SimpleMorphSynth::setParameter (int index, float newValue)
 {
 	int target = 0;
-	if (index >= TotalNumParams) {
-		index += LASTCOMMONPARAM;
-		index -= TotalNumParams;
+	if (index >= LastParam) {
+		index = index - LastParam + LASTCOMMONPARAM + 1;
 		target++;
 	}
 	// This method will be called by the host, probably on the audio thread, so
@@ -281,6 +305,10 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 	case SourceParam:				mSourceFactor = newValue; break;
 	case SmoothStrengthParam:		mSmoothStrengthFactor = newValue; break;
 	case SmoothRangeParam:			mSmoothRangeFactor = newValue; break;
+	case AmpAttackParam:			mADSRTables.at(2)->mAttack = newValue; break;
+	case AmpSustainParam:			mADSRTables.at(2)->mSustain = newValue; break;
+	case AmpDecayParam:				mADSRTables.at(2)->mDecay = newValue; break;
+	case AmpReleaseParam:			mADSRTables.at(2)->mRelease = newValue; break;
 	case AdjustPhaseParam:
 				if (std::abs(newValue) < 0.1) {
 					return;
@@ -289,6 +317,10 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 				mWaveTables.at(target)->executeAction(AdjustPhase, (int) newValue); 
 				
 				break;
+	case SynthAttackParam:			mADSRTables.at(target)->mAttack = newValue; break;
+	case SynthSustainParam:			mADSRTables.at(target)->mSustain = newValue; break;
+	case SynthDecayParam:			mADSRTables.at(target)->mDecay = newValue; break;
+	case SynthReleaseParam:			mADSRTables.at(target)->mRelease = newValue; break;
 	default:    break;
 	}
 }

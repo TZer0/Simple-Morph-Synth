@@ -13,12 +13,12 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 
-#define WAVESIZE 300
-#define WAVEHEIGHT 100.f
-#define TABLESPACING 10.f
+#define WAVESIZE 200
+#define WAVEHEIGHT 176.f
+#define TABLESPACING 8.f
 
-#define WINDOWWIDTH 800
-#define WINDOWHEIGHT 600
+#define WINDOWWIDTH 720
+#define WINDOWHEIGHT 520
 
 #define LASTRADIOACTION Action::UserFunc
 
@@ -36,22 +36,45 @@ enum Action
 	AdjustPhase,
 };
 
-#define LASTCOMMONPARAM SmoothRangeParam
+#define LASTCOMMONPARAM AmpReleaseParam
+#define LASTSYNTHPARAM SynthReleaseParam
+#define TOTALNUMPARAMS (LastParam-LASTCOMMONPARAM+LASTSYNTHPARAM)
 
 enum Parameter
 {
 	SourceParam = 0,
 	SmoothStrengthParam,
 	SmoothRangeParam,
+	AmpAttackParam,
+	AmpDecayParam,
+	AmpSustainParam,
+	AmpReleaseParam,
 
 	AdjustPhaseParam,
+	SynthAttackParam,
+	SynthDecayParam,
+	SynthSustainParam,
+	SynthReleaseParam,
 
-    TotalNumParams,
+	LastParam,
 	NoneParam
 };
 
 juce::String convertActionToString(int act);
 String getParameterName (int index);
+
+class ADSRTable
+{
+public:
+	ADSRTable()
+	{
+		mAttack = 0.5;
+		mDecay = 0.5;
+		mSustain = 0.75;
+		mRelease = 0.5;
+	}
+	float mAttack, mDecay, mSustain, mRelease;
+};
 
 
 class WaveTable
@@ -240,6 +263,7 @@ public:
     //==============================================================================
 
 	std::vector<WaveTable *> mWaveTables;
+	std::vector<ADSRTable *> mADSRTables;
 	float mSourceFactor, mSmoothStrengthFactor, mSmoothRangeFactor;
 
 private:
