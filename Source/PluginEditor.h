@@ -57,7 +57,8 @@ public:
 class SimpleMorphSynthProcessorEditor  : public AudioProcessorEditor,
                                             public SliderListener,
                                             public Timer,
-											public Button::Listener
+											public Button::Listener,
+											public KeyListener
 {
 public:
     SimpleMorphSynthProcessorEditor (SimpleMorphSynth* ownerFilter);
@@ -72,6 +73,8 @@ public:
 	void mouseUp(const MouseEvent &event);
 	void mouseDown(const MouseEvent &event);
 	void mouseDrag(const MouseEvent &event);
+	bool keyPressed (const KeyPress &, Component *) { return true; }
+	bool keyStateChanged (bool, Component *) { return true; }
 
 private:
     MidiKeyboardComponent mMidiKeyboard;

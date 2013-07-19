@@ -69,10 +69,10 @@ class ADSRTable
 public:
 	ADSRTable()
 	{
-		mAttack = 0.5;
-		mDecay = 0.5;
-		mSustain = 0.75;
-		mRelease = 0.5;
+		mAttack = 0.0;
+		mDecay = 0.0;
+		mSustain = 1.0;
+		mRelease = 0.0;
 	}
 	float mAttack, mDecay, mSustain, mRelease;
 };

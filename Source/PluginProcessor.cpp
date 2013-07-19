@@ -34,8 +34,11 @@ class WaveTableVoice  : public SynthesiserVoice
 {
 public:
 	WaveTableVoice(SimpleMorphSynth *synth)
-		: mAngleDelta (0.0),
-		mTailOff (0.0)
+		: mTimeDelta (0.0),
+		mCyclesPerSecond (0.0),
+		mTailOff (0.0),
+		mReleaseTime (0.0),
+		mReleased (false)
 	{
 		mSynth = synth;
 	}
@@ -48,14 +51,13 @@ public:
 	void startNote (const int midiNoteNumber, const float velocity,
 		SynthesiserSound* /*sound*/, const int /*currentPitchWheelPosition*/)
 	{
-		mCurrentAngle = 0.0;
+		mReleased = false;
+		mCurrentTime = 0.0;
 		mLevel = velocity * 0.15;
 		mTailOff = 0.0;
 
-		double cyclesPerSecond = MidiMessage::getMidiNoteInHertz (midiNoteNumber);
-		double cyclesPerSample = cyclesPerSecond / getSampleRate();
-
-		mAngleDelta = cyclesPerSample;
+		mCyclesPerSecond = MidiMessage::getMidiNoteInHertz (midiNoteNumber);
+		mTimeDelta = 1 / getSampleRate();
 	}
 
 	void stopNote (const bool allowTailOff)
@@ -64,17 +66,15 @@ public:
 		{
 			// start a tail-off by setting this flag. The render callback will pick up on
 			// this and do a fade out, calling clearCurrentNote() when it's finished.
-
-			if (mTailOff == 0.0) // we only need to begin a tail-off if it's not already doing so - the
-				// stopNote method could be called more than once.
-					mTailOff = 1.0;
+			mReleased = true;
+			mReleaseTime = 0.0;
 		}
 		else
 		{
 			// we're being told to stop playing immediately, so reset everything..
 
 			clearCurrentNote();
-			mAngleDelta = 0.0;
+			mTimeDelta = 0.0;
 		}
 	}
 
@@ -89,39 +89,67 @@ public:
 	}
 
 	void renderNextBlock (AudioSampleBuffer& outputBuffer, int startSample, int numSamples)
-	{		if (mAngleDelta != 0.0)
+	{
+		if (mTimeDelta != 0.0)
 		{
+			double attack = mSynth->mADSRTables.at(2)->mAttack;
+			double decay = mSynth->mADSRTables.at(2)->mDecay;
+			double sustain = mSynth->mADSRTables.at(2)->mSustain;
+			double release = mSynth->mADSRTables.at(2)->mRelease;
 
 			while (--numSamples >= 0)
 			{
-				float pos = (float) mCurrentAngle*WAVESIZE;
+				float pos = (float) mCurrentTime * WAVESIZE * mCyclesPerSecond;
 
-				const float currentSample = (float) (mSynth->getWaveValue(pos) * mLevel * (mTailOff > 0 ? mTailOff : 1));
+				float currentSample = (float) (mSynth->getWaveValue(pos) * mLevel * (mTailOff > 0 ? mTailOff : 1));
+				double modTime = mCurrentTime;
+
+				if (modTime < attack && attack > 0)
+				{
+					currentSample *= (modTime/attack);
+				} else
+				{
+					modTime -= attack;
+					if (modTime < decay && decay > 0)
+					{
+						double decProg = modTime/decay;
+						currentSample *= sustain * decProg + (1-decProg);
+					} else
+					{
+						currentSample *= sustain;
+					}
+				}
+
+				if (mReleased && release > 0)
+				{
+					if (mReleaseTime < release)
+					{
+						currentSample *= 1-mReleaseTime/release;
+						mReleaseTime += mTimeDelta;
+					} else
+					{
+						currentSample = 0;
+						//mReleased = false;
+						clearCurrentNote();
+					}
+				} else if (mReleased)
+				{
+					currentSample = 0;
+					clearCurrentNote();
+				}
 
 				for (int i = outputBuffer.getNumChannels(); --i >= 0;)
 					*outputBuffer.getSampleData (i, startSample) += currentSample;
 
-				mCurrentAngle += mAngleDelta;
+				mCurrentTime += mTimeDelta;
 				++startSample;
-
-				if (mTailOff > 0)
-				{
-					mTailOff *= 0.99;
-
-					if (mTailOff <= 0.005)
-					{
-						clearCurrentNote();
-
-						mAngleDelta = 0.0;
-						break;
-					}
-				}
 			}
 		}
 	}
 
 private:
-	double mCurrentAngle, mAngleDelta, mLevel, mTailOff;
+	double mCurrentTime, mTimeDelta, mLevel, mTailOff, mCyclesPerSecond, mReleaseTime;
+	bool mReleased;
 	SimpleMorphSynth *mSynth;
 };
 

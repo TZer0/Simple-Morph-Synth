@@ -16,7 +16,7 @@ SimpleMorphSynthProcessorEditor::SimpleMorphSynthProcessorEditor (SimpleMorphSyn
     : AudioProcessorEditor (ownerFilter),
       mMidiKeyboard (ownerFilter->mKeyboardState, MidiKeyboardComponent::horizontalKeyboard)
 {
-	
+	addKeyListener(this);
 
     // add the midi keyboard component..
     //addAndMakeVisible (&mMidiKeyboard);
