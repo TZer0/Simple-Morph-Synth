@@ -32,53 +32,62 @@
 
 
 
-static juce::Point<float> OscPoints[3] = { juce::Point<float>(WINDOWOFFSET+OSCBOXOFFSET,WINDOWOFFSET+OSCBOXOFFSET), 
+static juce::Point<float> OscPoints[3] =
+{ juce::Point<float>(WINDOWOFFSET+OSCBOXOFFSET,WINDOWOFFSET+OSCBOXOFFSET), 
 	juce::Point<float>((int) (WINDOWWIDTH-OSCBOXWIDTH-OSCBOXOFFSET), WINDOWOFFSET+OSCBOXOFFSET), juce::Point<float>(248, 248) };
-static juce::Point<int> PresetFuncButtonPoints[2] = { OscPoints[0].toInt() + juce::Point<int>(WAVESIZE, 0), OscPoints[1].toInt() + juce::Point<int>((int)WAVESIZE,0) };
-static juce::Point<int> TabbedComponentPoints[2] = {juce::Point<int>(WINDOWOFFSET, TABBOXPOSY), juce::Point<int>(WINDOWWIDTH-WINDOWOFFSET-TABBOXWIDTH, TABBOXPOSY)};
-static juce::Point<int> ADSRPoints[3] = { juce::Point<int>(0,0), juce::Point<int>(0,0), juce::Point<int>(576,424) };
+static juce::Point<int> PresetFuncButtonPoints[2] =
+{ OscPoints[0].toInt() + juce::Point<int>(WAVESIZE, 0), OscPoints[1].toInt() + juce::Point<int>((int)WAVESIZE,0) };
+static juce::Point<int> TabbedComponentPoints[2] =
+{juce::Point<int>(WINDOWOFFSET, TABBOXPOSY), juce::Point<int>(WINDOWWIDTH-WINDOWOFFSET-TABBOXWIDTH, TABBOXPOSY)};
+static juce::Point<int> ADSRPoints[3] =
+{ juce::Point<int>(0,0), juce::Point<int>(0,0), juce::Point<int>(576,424) };
 
+template <class T>
 class ComponentContainer
 {
 public:
-	ComponentContainer() { mLabel = nullptr; mComponent = nullptr; mParam = NoneParam; mTarget = 0;}
-	ComponentContainer(Label *label, Component *comp, Parameter p, int t) {
+	ComponentContainer()
+	{ mLabel = nullptr; mComponent = nullptr; mParam = NoneParam; mTarget = 0;}
+	ComponentContainer(Label *label, T *comp, Parameter p, int t)
+	{
 		mLabel = label;
 		mComponent = comp;
 		mParam = p;
 		mTarget = t;
 	}
 	Label *mLabel;
-	Component *mComponent;
+	T *mComponent;
 	Parameter mParam;
 	size_t mTarget;
 };
 
 class SimpleMorphSynthProcessorEditor  : public AudioProcessorEditor,
-                                            public SliderListener,
-                                            public Timer,
-											public Button::Listener,
-											public KeyListener
+	public SliderListener,
+	public Timer,
+	public Button::Listener,
+	public KeyListener
 {
 public:
-    SimpleMorphSynthProcessorEditor (SimpleMorphSynth* ownerFilter);
-    ~SimpleMorphSynthProcessorEditor();
+	SimpleMorphSynthProcessorEditor (SimpleMorphSynth* ownerFilter);
+	~SimpleMorphSynthProcessorEditor();
 
-    //==============================================================================
-    void timerCallback();
-    void paint (Graphics& g);
-    void resized();
-    void sliderValueChanged (Slider*);
+	//==============================================================================
+	void timerCallback();
+	void paint (Graphics& g);
+	void resized();
+	void sliderValueChanged (Slider*);
 	void sliderDragEnded (Slider *);
 	void mouseUp(const MouseEvent &event);
 	void mouseDown(const MouseEvent &event);
 	void mouseDrag(const MouseEvent &event);
-	bool keyPressed (const KeyPress &, Component *) { return true; }
-	bool keyStateChanged (bool, Component *) { return true; }
+	bool keyPressed (const KeyPress &, Component *)
+	{ return true; }
+	bool keyStateChanged (bool, Component *)
+	{ return true; }
 
 private:
-    MidiKeyboardComponent mMidiKeyboard;
-
+	MidiKeyboardComponent mMidiKeyboard;
+	void updateAllComponents();
 	int mWaveClicked;
 	juce::Slider *mDraggingSlider;
 	juce::Point<float> mLastDrag;
@@ -86,17 +95,17 @@ private:
 	int checkIfInWavetable(int x, int y, int forceTable = -1);
 	AudioPlayHead::CurrentPositionInfo mLastDisplayedPosition;
 	std::vector<juce::ToggleButton *> mButtons;
-	std::vector<ComponentContainer> mSliders;
+	std::vector<ComponentContainer<Slider>> mSliders;
 	void buttonClicked(Button *button);
 	void buttonStateChanged(Button *);
 	void addSlider(Parameter param, juce::Point<int> point, juce::Point<int> size, double minVal = 0.0, double maxVal = 1.0, int target = 0,
-		juce::Slider::SliderStyle style = juce::Slider::SliderStyle::LinearVertical);
+			juce::Slider::SliderStyle style = juce::Slider::SliderStyle::LinearVertical);
 	void checkUserWaveBox(int target);
-	
-    SimpleMorphSynth* getProcessor() const
-    {
-        return static_cast <SimpleMorphSynth*> (getAudioProcessor());
-    }
+
+	SimpleMorphSynth* getProcessor() const
+	{
+		return static_cast <SimpleMorphSynth*> (getAudioProcessor());
+	}
 
 };
 
