@@ -64,6 +64,20 @@
 	mDraggingSlider = nullptr;
 	startTimer (10);
 	resized();
+
+	mOscBoxPath1.clear();
+    mOscBoxPath1.startNewSubPath (152.0f, 208.0f);
+    mOscBoxPath1.lineTo (328.0f, 208.0f);
+    mOscBoxPath1.lineTo (328.0f, 232.0f);
+    mOscBoxPath1.lineTo (176.0f, 232.0f);
+    mOscBoxPath1.closeSubPath();
+
+	mOscBoxPath2.clear();
+    mOscBoxPath2.startNewSubPath (392.0f, 208.0f);
+    mOscBoxPath2.lineTo (576.0f, 208.0f);
+    mOscBoxPath2.lineTo (544.0f, 232.0f);
+    mOscBoxPath2.lineTo (392.0f, 232.0f);
+    mOscBoxPath2.closeSubPath();
 }
 
 void SimpleMorphSynthProcessorEditor::addSlider(Parameter param, juce::Point<int> point, 
@@ -211,6 +225,8 @@ void SimpleMorphSynthProcessorEditor::paint (Graphics& g)
 	g.setColour(COMPBACKGROUND);
 	g.fillRect(WINDOWOFFSET, BUTTOMBOXY, WINDOWWIDTH-WINDOWOFFSET*2, WINDOWHEIGHT-BUTTOMBOXY-WINDOWOFFSET);
 
+	g.fillPath(mOscBoxPath1);
+	g.fillPath(mOscBoxPath2);
 }
 
 void SimpleMorphSynthProcessorEditor::resized()

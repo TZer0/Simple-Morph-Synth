@@ -5,7 +5,7 @@
 #include "PluginProcessor.h"
 
 #define PRESETACTIONBUTTONSIZE 25
-#define OSCBOXWIDTH 300.f
+#define OSCBOXWIDTH 312.f
 #define OSCBOXOFFSET 8
 #define OSCBOXHEIGHT (WAVEHEIGHT+OSCBOXOFFSET*2)
 #define OUTPUTWIDTH 224
@@ -101,6 +101,8 @@ private:
 	void addSlider(Parameter param, juce::Point<int> point, juce::Point<int> size, double minVal = 0.0, double maxVal = 1.0, int target = 0,
 			juce::Slider::SliderStyle style = juce::Slider::SliderStyle::LinearVertical);
 	void checkUserWaveBox(int target);
+
+	Path mOscBoxPath1, mOscBoxPath2;
 
 	SimpleMorphSynth* getProcessor() const
 	{
