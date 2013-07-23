@@ -93,12 +93,10 @@ public:
 	{
 		if (mTimeDelta != 0.0)
 		{
-			double attack = mSynth->mADSRTables.at(2)->mAttack;
-			double decay = mSynth->mADSRTables.at(2)->mDecay;
-			double sustain = mSynth->mADSRTables.at(2)->mSustain;
-			double release = mSynth->mADSRTables.at(2)->mRelease;
-			attack = std::max(0.005, attack);
-			release = std::max(0.005, release);
+			float attack = std::max(mSynth->mADSRTables[2].mAttack, DECLICK);
+			float decay = mSynth->mADSRTables[2].mDecay;
+			float sustain = mSynth->mADSRTables[2].mSustain;
+			float release = std::max(mSynth->mADSRTables[2].mRelease, DECLICK);
 
 			while (--numSamples >= 0)
 			{
@@ -163,7 +161,7 @@ private:
 {
 	mUpdateEditor = true;
 	// Set up some default values..
-	mSourceFactor = mSmoothStrengthFactor = mSmoothRangeFactor = 0;
+	mSmoothStrengthFactor = mSmoothRangeFactor = 0;
 
 
 	mLastUIWidth = WINDOWWIDTH;
@@ -171,18 +169,16 @@ private:
 
 	mLastPosInfo.resetToDefault();
 	mDelayPosition = 0;
-	WaveTable *sawT = new WaveTable();
-	WaveTable *sinT = new WaveTable();
-	sawT->executeAction(SawFunc);
-	sawT->executeAction(Reverse);
-	sinT->executeAction(SinFunc);
-	sinT->executeAction(Flip);
-	mWaveTables.push_back(sawT);
-	mWaveTables.push_back(sinT);
+	mWaveTables[0] = WaveTable();
+	mWaveTables[1] = WaveTable();
+	mWaveTables[0].executeAction(SawFunc);
+	mWaveTables[0].executeAction(Reverse);
+	mWaveTables[1].executeAction(SinFunc);
+	mWaveTables[1].executeAction(Flip);
 
 	for (int i = 0; i < 3; i++)
 	{
-		mADSRTables.push_back(new ADSRTable());
+		mADSRTables[i] = ADSRTable();
 	}
 
 	// Initialise the synth...
@@ -203,11 +199,9 @@ float SimpleMorphSynth::getWaveValue(float pos)
 	int curSampPos = (int) pos;
 	float posOffset = (float) pos-curSampPos;
 	float outVal = 0.f;
-	float fac = mSourceFactor;
 	float regTotal = 0.0;
-	for (size_t i = 0; i < mWaveTables.size(); i++)
+	for (size_t i = 0; i < NUMOSC; i++)
 	{
-		WaveTable *table = mWaveTables[i];
 		for (int j = -range; j <= range; j++)
 		{
 			int aPos = (curSampPos+j)%WAVESIZE;
@@ -215,14 +209,12 @@ float SimpleMorphSynth::getWaveValue(float pos)
 			{
 				aPos += WAVESIZE;
 			}
-			float from = table->mWave[aPos];
-			float to = table->mWave[(aPos+1)%WAVESIZE];
+			float from = mWaveTables[i].getWaveValue(aPos);
+			float to = mWaveTables[i].getWaveValue(aPos+1);
 			float smooth = (range-std::abs(j)*mSmoothStrengthFactor);
 			regTotal += smooth;
-			outVal += fac *(from*(1-posOffset) + to*posOffset) * smooth * 2;
+			outVal += mAmplifiers[i].mAmp *(from*(1-posOffset) + to*posOffset) * smooth * 2;
 		}
-
-		fac = 1-fac;
 	}
 	if (regTotal > 0.1f)
 	{
@@ -234,34 +226,30 @@ float SimpleMorphSynth::getWaveValue(float pos)
 
 SimpleMorphSynth::~SimpleMorphSynth()
 {
-	for (size_t i = 0; i < mWaveTables.size(); i++)
-	{
-		delete mWaveTables[i];
-	}
 }
 
 float SimpleMorphSynth::getWaveTableValue(size_t table, int pos)
 {
-	if (table < mWaveTables.size() && 0 <= pos && pos < WAVESIZE)
+	if (table < NUMOSC && 0 <= pos && pos < WAVESIZE)
 	{
-		return mWaveTables.at(table)->mWave[pos];
+		return mWaveTables[table].getWaveValue(pos);
 	}
 	return 0.;
 }
 
 void SimpleMorphSynth::setWaveTableValue(size_t table, int pos, float value)
 {
-	if (table < mWaveTables.size())
+	if (table < NUMOSC)
 	{
-		mWaveTables.at(table)->setWaveSection(pos, value);
+		mWaveTables[table].setWaveSection(pos, value);
 	}
 }
 
 WaveTable *SimpleMorphSynth::getWaveTable(size_t table)
 {
-	if (table < mWaveTables.size())
+	if (table < NUMOSC)
 	{
-		return mWaveTables[table];
+		return &mWaveTables[table];
 	}
 	return NULL;
 }
@@ -283,17 +271,17 @@ float SimpleMorphSynth::getParameter (int index)
 
 	switch (index)
 	{
-		case SourceParam:				return mSourceFactor;
 		case SmoothStrengthParam:		return mSmoothStrengthFactor;
 		case SmoothRangeParam:			return mSmoothRangeFactor;
-		case AmpAttackParam:			return mADSRTables.at(2)->mAttack;
-		case AmpSustainParam:			return mADSRTables.at(2)->mSustain;
-		case AmpDecayParam:				return mADSRTables.at(2)->mDecay;
-		case AmpReleaseParam:			return mADSRTables.at(2)->mRelease;
-		case SynthAttackParam:			return mADSRTables.at(target)->mAttack;
-		case SynthSustainParam:			return mADSRTables.at(target)->mSustain;
-		case SynthDecayParam:			return mADSRTables.at(target)->mDecay;
-		case SynthReleaseParam:			return mADSRTables.at(target)->mRelease;
+		case AmpAttackParam:			return mADSRTables[2].mAttack;
+		case AmpSustainParam:			return mADSRTables[2].mSustain;
+		case AmpDecayParam:				return mADSRTables[2].mDecay;
+		case AmpReleaseParam:			return mADSRTables[2].mRelease;
+		case SynthAmpParam:				return mAmplifiers[target].mAmp;
+		case SynthAttackParam:			return mADSRTables[target].mAttack;
+		case SynthSustainParam:			return mADSRTables[target].mSustain;
+		case SynthDecayParam:			return mADSRTables[target].mDecay;
+		case SynthReleaseParam:			return mADSRTables[target].mRelease;
 		default:						return 0.0f;
 	}
 }
@@ -309,7 +297,6 @@ const String SimpleMorphSynth::getParameterName (int index)
 	juce::String tOsc =  juce::String(target+1);
 	switch (index)
 	{
-		case SourceParam:				return "Source";
 		case SmoothStrengthParam:		return "SmoothStrength";
 		case SmoothRangeParam:			return "SmoothRange";
 		case AmpAttackParam:			return "AmpAttackParam";
@@ -317,6 +304,7 @@ const String SimpleMorphSynth::getParameterName (int index)
 		case AmpReleaseParam:			return "AmpReleaseParam";
 		case AmpSustainParam:			return "AmpSustainParam";
 		case AdjustPhaseParam:			return juce::String("AdjustOSCPhase") + tOsc;
+		case SynthAmpParam:				return juce::String("SynthAmpParam") + tOsc;
 		case SynthAttackParam:			return juce::String("SynthAttackParam") + tOsc;
 		case SynthDecayParam:			return juce::String("SyntDecayParam") + tOsc;
 		case SynthSustainParam:			return juce::String("SynthSustainParam") + tOsc;
@@ -331,6 +319,7 @@ const String SimpleMorphSynth::getParameterName (int index)
 
 void SimpleMorphSynth::setParameter (int index, float newValue)
 {
+	mUpdateEditor = true;
 	int target = 0;
 	if (index >= LastParam)
 	{
@@ -342,26 +331,18 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 	// UI-related, or anything at all that may block in any way!
 	switch (index)
 	{
-		case SourceParam:				mSourceFactor = newValue; break;
 		case SmoothStrengthParam:		mSmoothStrengthFactor = newValue; break;
 		case SmoothRangeParam:			mSmoothRangeFactor = newValue; break;
-		case AmpAttackParam:			mADSRTables.at(2)->mAttack = newValue; break;
-		case AmpSustainParam:			mADSRTables.at(2)->mSustain = newValue; break;
-		case AmpDecayParam:				mADSRTables.at(2)->mDecay = newValue; break;
-		case AmpReleaseParam:			mADSRTables.at(2)->mRelease = newValue; break;
-		case AdjustPhaseParam:
-							if (std::abs(newValue) < 0.1)
-							{
-								return;
-							}
-							newValue = std::ceil(newValue);
-							mWaveTables.at(target)->executeAction(AdjustPhase, (int) newValue); 
-
-							break;
-		case SynthAttackParam:			mADSRTables.at(target)->mAttack = newValue; break;
-		case SynthSustainParam:			mADSRTables.at(target)->mSustain = newValue; break;
-		case SynthDecayParam:			mADSRTables.at(target)->mDecay = newValue; break;
-		case SynthReleaseParam:			mADSRTables.at(target)->mRelease = newValue; break;
+		case AmpAttackParam:			mADSRTables[2].mAttack = newValue; break;
+		case AmpSustainParam:			mADSRTables[2].mSustain = newValue; break;
+		case AmpDecayParam:				mADSRTables[2].mDecay = newValue; break;
+		case AmpReleaseParam:			mADSRTables[2].mRelease = newValue; break;
+		case SynthAmpParam:				mAmplifiers[target].mAmp = newValue; break;
+		case AdjustPhaseParam:			mWaveTables[target].executeAction(AdjustPhase, newValue); break;
+		case SynthAttackParam:			mADSRTables[target].mAttack = newValue; break;
+		case SynthSustainParam:			mADSRTables[target].mSustain = newValue; break;
+		case SynthDecayParam:			mADSRTables[target].mDecay = newValue; break;
+		case SynthReleaseParam:			mADSRTables[target].mRelease = newValue; break;
 		default:   break;
 
 	}
@@ -467,25 +448,26 @@ void SimpleMorphSynth::getStateInformation (MemoryBlock& destData)
 
 	XmlElement xml ("SIMPLEMORPHSSYNTH");
 
-	xml.setAttribute ("mSourceFactor", mSourceFactor);
 	xml.setAttribute ("mSmoothStrengthFactor", mSmoothStrengthFactor);
 	xml.setAttribute ("mSmoothRangeFactor", mSmoothRangeFactor);
 
-	for (size_t w = 0; w < mWaveTables.size(); w++) 
+	for (size_t w = 0; w < NUMOSC; w++) 
 	{
 		for (size_t i = 0; i < WAVESIZE; i++)
 		{
-			xml.setAttribute(juce::String("wave") + juce::String(w) + juce::String("-") + juce::String(i), mWaveTables.at(w)->mWave[i]);
+			xml.setAttribute(juce::String("wave") + juce::String(w) + juce::String("-") + juce::String(i), mWaveTables[w].mWave[i]);
 		}
+		xml.setAttribute(juce::String("oscoffset") + juce::String(w), mWaveTables[w].mOscOffset);
 	}
 
-	for (size_t i = 0; i < mADSRTables.size(); i++)
+	for (size_t i = 0; i < NUMDEVINST; i++)
 	{
 		juce::String table = juce::String(i);
-		xml.setAttribute(juce::String("attack") + table, mADSRTables[i]->mAttack);
-		xml.setAttribute(juce::String("decay") + table, mADSRTables[i]->mDecay);
-		xml.setAttribute(juce::String("sustain") + table, mADSRTables[i]->mSustain);
-		xml.setAttribute(juce::String("release") + table, mADSRTables[i]->mRelease);
+		xml.setAttribute(juce::String("attack") + table, mADSRTables[i].mAttack);
+		xml.setAttribute(juce::String("decay") + table, mADSRTables[i].mDecay);
+		xml.setAttribute(juce::String("sustain") + table, mADSRTables[i].mSustain);
+		xml.setAttribute(juce::String("release") + table, mADSRTables[i].mRelease);
+		xml.setAttribute(juce::String("amp") + table, mAmplifiers[i].mAmp);
 	}
 
 	// then use this helper function to stuff it into the binary blob and return it..
@@ -505,23 +487,25 @@ void SimpleMorphSynth::setStateInformation (const void* data, int sizeInBytes)
 	{
 		if (xmlState->hasTagName ("SIMPLEMORPHSSYNTH"))
 		{
-			mSourceFactor  = (float) xmlState->getDoubleAttribute ("mSourceFactor", 0.0);
 			mSmoothStrengthFactor  = (float) xmlState->getDoubleAttribute ("mSmoothStrengthFactor", 0.0);
 			mSmoothRangeFactor  = (float) xmlState->getDoubleAttribute ("mSmoothRangeFactor", 1.0);
-			for (size_t w = 0; w < mWaveTables.size(); w++) 
+			for (size_t w = 0; w < NUMOSC; w++) 
 			{
 				for (size_t i = 0; i < WAVESIZE; i++)
 				{
-					mWaveTables.at(w)->mWave[i] = (float) xmlState->getDoubleAttribute(juce::String("wave") + juce::String(w) + juce::String("-") + juce::String(i));
+					mWaveTables[w].mWave[i] = (float) xmlState->getDoubleAttribute(juce::String("wave") + juce::String(w) + juce::String("-") + juce::String(i));
 				}
+				mWaveTables[w].mOscOffset = (float) xmlState->getDoubleAttribute(juce::String("oscoffset") + juce::String(w), 0.0);
 			}
-			for (size_t i = 0; i < mADSRTables.size(); i++)
+
+			for (size_t i = 0; i < NUMDEVINST; i++)
 			{
 				juce::String table = juce::String(i);
-				mADSRTables[i]->mAttack = (float) xmlState->getDoubleAttribute(juce::String("attack") + table);
-				mADSRTables[i]->mDecay = (float) xmlState->getDoubleAttribute(juce::String("decay") + table);
-				mADSRTables[i]->mSustain = (float) xmlState->getDoubleAttribute(juce::String("sustain") + table, 1.0);
-				mADSRTables[i]->mRelease = (float) xmlState->getDoubleAttribute(juce::String("release") + table);
+				mADSRTables[i].mAttack = (float) xmlState->getDoubleAttribute(juce::String("attack") + table);
+				mADSRTables[i].mDecay = (float) xmlState->getDoubleAttribute(juce::String("decay") + table);
+				mADSRTables[i].mSustain = (float) xmlState->getDoubleAttribute(juce::String("sustain") + table, 1.0);
+				mADSRTables[i].mRelease = (float) xmlState->getDoubleAttribute(juce::String("release") + table);
+				mAmplifiers[i].mAmp = (float) xmlState->getDoubleAttribute(juce::String("amp") + table, 1.0);
 			}
 		}
 	}

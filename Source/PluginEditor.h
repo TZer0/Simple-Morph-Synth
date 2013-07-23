@@ -71,7 +71,6 @@ public:
 	SimpleMorphSynthProcessorEditor (SimpleMorphSynth* ownerFilter);
 	~SimpleMorphSynthProcessorEditor();
 
-	//==============================================================================
 	void timerCallback();
 	void paint (Graphics& g);
 	void resized();
@@ -89,7 +88,6 @@ private:
 	MidiKeyboardComponent mMidiKeyboard;
 	void updateAllComponents();
 	int mWaveClicked;
-	juce::Slider *mDraggingSlider;
 	juce::Point<float> mLastDrag;
 	bool mDragging;
 	int checkIfInWavetable(int x, int y, int forceTable = -1);
@@ -101,6 +99,7 @@ private:
 	void addSlider(Parameter param, juce::Point<int> point, juce::Point<int> size, double minVal = 0.0, double maxVal = 1.0, int target = 0,
 			juce::Slider::SliderStyle style = juce::Slider::SliderStyle::LinearVertical);
 	void checkUserWaveBox(int target);
+	void updateParam(int param, float val);
 
 	Path mOscBoxPath1, mOscBoxPath2;
 
