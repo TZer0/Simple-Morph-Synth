@@ -24,13 +24,15 @@
 	// set our component's initial size to be the last one that was stored in the filter's settings
 	setSize (ownerFilter->mLastUIWidth,
 			ownerFilter->mLastUIHeight);
-	addSlider(SourceParam, juce::Point<int>(390, 20), juce::Point<int>(20, (int) WAVEHEIGHT-40));
 	addSlider(SmoothStrengthParam, juce::Point<int>(380, 424), juce::Point<int>(16, 72));
 	addSlider(SmoothRangeParam, juce::Point<int>(400, 424), juce::Point<int>(16, 72));
+	addSlider(SynthAmpParam, juce::Point<int>(350, 20), juce::Point<int>(20, (int) WAVEHEIGHT-40),0, 1, 0);
+	addSlider(SynthAmpParam, juce::Point<int>(370, 20), juce::Point<int>(20, (int) WAVEHEIGHT-40),0, 1, 1);
+
 	addSlider(AdjustPhaseParam, OscPoints[0].toInt() + juce::Point<int>((int) (OSCBOXWIDTH/2), 
-				(int) OSCBOXHEIGHT), juce::Point<int>(PHASESLIDERWIDTH, 20), -5, 5, 0, juce::Slider::SliderStyle::LinearHorizontal);
+				(int) OSCBOXHEIGHT), juce::Point<int>(PHASESLIDERWIDTH, 20), 0, 1, 0, juce::Slider::SliderStyle::LinearHorizontal);
 	addSlider(AdjustPhaseParam, OscPoints[1].toInt() + juce::Point<int>((int) (OSCBOXWIDTH/2-PHASESLIDERWIDTH/2), 
-				(int) OSCBOXHEIGHT), juce::Point<int>(PHASESLIDERWIDTH, 20), -5, 5, 1, juce::Slider::SliderStyle::LinearHorizontal);
+				(int) OSCBOXHEIGHT), juce::Point<int>(PHASESLIDERWIDTH, 20), 0, 1, 1, juce::Slider::SliderStyle::LinearHorizontal);
 
 	for (int i = AmpAttackParam; i <= AmpReleaseParam; i++)
 	{
@@ -48,6 +50,7 @@
 	tabbedComponent->setBounds (TabbedComponentPoints[0].getX(), TabbedComponentPoints[0].getY(), TABBOXWIDTH, TABOXHEIGHT);
 
 
+
 	for (int i = 0; i < 2; i++)
 	{
 		for (int j = 0; j <= LASTRADIOACTION; j++)
@@ -61,9 +64,9 @@
 	}
 
 	mWaveClicked = -1;
-	mDraggingSlider = nullptr;
 	startTimer (10);
 	resized();
+	updateAllComponents();
 }
 
 void SimpleMorphSynthProcessorEditor::addSlider(Parameter param, juce::Point<int> point, 
@@ -132,8 +135,7 @@ void SimpleMorphSynthProcessorEditor::mouseDrag(const MouseEvent &event)
 
 int SimpleMorphSynthProcessorEditor::checkIfInWavetable(int x, int y, int forceTable)
 {
-	size_t numTables = getProcessor()->getNumTables();
-	for (size_t i = 0; i < numTables; i++)
+	for (size_t i = 0; i < NUMOSC; i++)
 	{
 		juce::Point<float> table = OscPoints[i];
 		int tx = (int) (x - table.getX()); int ty = (int) (y - table.getY());
@@ -168,9 +170,8 @@ void SimpleMorphSynthProcessorEditor::paint (Graphics& g)
 	SimpleMorphSynth *synth = getProcessor();
 	g.setColour(BACKGROUND);
 	g.fillAll();
-	size_t tables = getProcessor()->getNumTables();
 
-	for (size_t t = 0; t < tables; t++)
+	for (size_t t = 0; t < NUMOSC; t++)
 	{
 		juce::Point<float> oscPoint = OscPoints[t];
 		float x = oscPoint.getX(); float y = oscPoint.getY();
@@ -178,7 +179,7 @@ void SimpleMorphSynthProcessorEditor::paint (Graphics& g)
 		g.fillRect(x-OSCBOXOFFSET, y-OSCBOXOFFSET, OSCBOXWIDTH, OSCBOXHEIGHT);
 		g.setColour(TABLEBACKGROUND);
 
-		g.fillRect(x, y, (float) WAVESIZE, (WAVEHEIGHT/2) * 2);
+		g.fillRect(x, y, (float) WAVESIZE-1, WAVEHEIGHT);
 		g.setGradientFill(juce::ColourGradient(OSCOUTPUT1, x, y, OSCOUTPUT2, x, y+WAVEHEIGHT, false));
 		y += (WAVEHEIGHT/2);
 		juce::Path pth;
@@ -188,7 +189,7 @@ void SimpleMorphSynthProcessorEditor::paint (Graphics& g)
 			float waveVal = getProcessor()->getWaveTableValue(t, i);
 			pth.lineTo(x+i, y-waveVal*(WAVEHEIGHT/2));
 		}
-		pth.lineTo(x+WAVESIZE, y);
+		pth.lineTo(x+WAVESIZE-1, y);
 		g.fillPath(pth);
 	}
 
@@ -196,16 +197,16 @@ void SimpleMorphSynthProcessorEditor::paint (Graphics& g)
 	juce::Point<float> oscPoint = OscPoints[2];
 	float x = oscPoint.getX(); float y = oscPoint.getY();
 	g.setColour(TABLEBACKGROUND);
-	g.fillRect(x, y, (float) OUTPUTWIDTH, (float) OUTPUTHEIGHT);
+	g.fillRect(x, y, (float) OUTPUTWIDTH-1, (float) OUTPUTHEIGHT);
 	g.setGradientFill(juce::ColourGradient(MAINOUTPUT1, x, y, MAINOUTPUT2, x, y+OUTPUTHEIGHT, false));
 	y += OUTPUTHEIGHT/2;
 	juce::Path pth;
 	pth.startNewSubPath(x, y);
 	for (int i = 0; i < OUTPUTWIDTH; i++)
 	{
-		pth.lineTo(x+i, y - synth->getWaveValue(i*(WAVESIZE/((float)OUTPUTWIDTH))) * (OUTPUTHEIGHT/2));
+		pth.lineTo(x+i, y - synth->getWaveValue(i*(WAVESIZE/((float)OUTPUTWIDTH))) * (OUTPUTHEIGHT/4));
 	}
-	pth.lineTo(x+OUTPUTWIDTH, y);
+	pth.lineTo(x+OUTPUTWIDTH-1, y);
 	g.fillPath(pth);
 
 	g.setColour(COMPBACKGROUND);
@@ -248,16 +249,12 @@ void SimpleMorphSynthProcessorEditor::timerCallback()
 
 	AudioPlayHead::CurrentPositionInfo newPos (synth->mLastPosInfo);
 
-	if (mDraggingSlider != nullptr)
+	if (synth->mUpdateEditor)
 	{
-		sliderValueChanged(mDraggingSlider);
-	}
-
-	//if (synth->mUpdateEditor)
-	//{
 		updateAllComponents();
-		//synth->mUpdateEditor = false;
-	//}
+		synth->mUpdateEditor = false;
+		repaint();
+	}
 }
 
 void SimpleMorphSynthProcessorEditor::updateAllComponents()
@@ -273,26 +270,29 @@ void SimpleMorphSynthProcessorEditor::updateAllComponents()
 // This is our Slider::Listener callback, when the user drags a slider.
 void SimpleMorphSynthProcessorEditor::sliderValueChanged (Slider* slider)
 {
-	if (getProcessor()->mUpdateEditor)
-	{
-		//return;
-	}
 	for (size_t i = 0; i < mSliders.size(); i++)
 	{
 		if (mSliders[i].mComponent == slider)
 		{
 
-			if (mSliders[i].mParam == AdjustPhaseParam && std::abs(slider->getValue()) > 0.1 )
+			if (mSliders[i].mParam == AdjustPhaseParam)
 			{
-				mDraggingSlider = slider;
 				checkUserWaveBox(mSliders[i].mTarget);
 			}
-			getProcessor()->setParameterNotifyingHost (mSliders[i].mParam + ((int)mSliders[i].mTarget)*SYNTHPARAMS,
+			
+			updateParam(mSliders[i].mParam + ((int)mSliders[i].mTarget)*SYNTHPARAMS,
 					(float) slider->getValue());
-
 			repaint();
 		}
 	}
+}
+
+void SimpleMorphSynthProcessorEditor::updateParam(int param, float val)
+{
+	auto *synth = getProcessor();
+	bool pre = synth->mUpdateEditor;
+	synth->setParameterNotifyingHost(param, val);
+	synth->mUpdateEditor = pre;
 }
 
 void SimpleMorphSynthProcessorEditor::checkUserWaveBox(int target)
@@ -307,11 +307,6 @@ void SimpleMorphSynthProcessorEditor::checkUserWaveBox(int target)
 
 void SimpleMorphSynthProcessorEditor::sliderDragEnded (Slider *)
 {
-	if (mDraggingSlider != nullptr)
-	{
-		mDraggingSlider->setValue(0);
-		mDraggingSlider = nullptr;
-	}
 }
 
 
@@ -328,7 +323,7 @@ void SimpleMorphSynthProcessorEditor::buttonClicked(Button *button)
 			}
 			if (mButtons[k] == button)
 			{
-				getProcessor()->mWaveTables[i]->executeAction(j);
+				getProcessor()->mWaveTables[i].executeAction(j);
 				repaint();
 				return;
 			}

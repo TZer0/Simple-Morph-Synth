@@ -16,6 +16,7 @@
 #define WAVESIZE 200
 #define WAVEHEIGHT 176.f
 #define TABLESPACING 8.f
+#define DECLICK 0.005f
 
 #define WINDOWWIDTH 720
 #define WINDOWHEIGHT 520
@@ -43,8 +44,7 @@ enum Action
 
 enum Parameter
 {
-	SourceParam = 0,
-	SmoothStrengthParam,
+	SmoothStrengthParam = 0,
 	SmoothRangeParam,
 	AmpAttackParam,
 	AmpDecayParam,
@@ -52,6 +52,7 @@ enum Parameter
 	AmpReleaseParam,
 
 	AdjustPhaseParam,
+	SynthAmpParam,
 	SynthAttackParam,
 	SynthDecayParam,
 	SynthSustainParam,
@@ -60,6 +61,9 @@ enum Parameter
 	LastParam,
 	NoneParam
 };
+
+#define NUMOSC 2
+#define NUMDEVINST (NUMOSC+2)
 
 juce::String convertActionToString(int act);
 String getParameterName (int index);
@@ -86,18 +90,19 @@ public:
 		for (int i = 0; i < WAVESIZE; i++)
 		{
 			mWave[i] = 0;
+			mOscOffset = 0;
 		}
 	}
 	void setWaveSection(int x, float y)
 	{
 		if (0 <= x && x < WAVESIZE)
 		{
-			mWave[x] = std::max(std::min(y, 1.f), -1.f);
+			mWave[(x+(int)(mOscOffset*WAVESIZE))%WAVESIZE] = std::max(std::min(y, 1.f), -1.f);
 		}
 	}
-	void executeAction(size_t ac, int param = 0)
+	void executeAction(size_t ac, float param = 0)
 	{ executeAction((Action) ac, param); }
-	void executeAction(Action ac, int param = 0)
+	void executeAction(Action ac, float param = 0)
 	{
 		if (ac == SinFunc)
 		{
@@ -161,12 +166,12 @@ public:
 			}
 
 			// Calculate new wave
-			int range = param*2+1;
+			int range = (int) (param*2+1);
 			for (int i = 0; i < WAVESIZE; i++)
 			{
 				for (int j = 0; j < range; j++)
 				{
-					int from = (i-param+j) % WAVESIZE;
+					int from = (i-range/2+j) % WAVESIZE;
 					if (from < 0)
 					{
 						from += WAVESIZE;
@@ -177,30 +182,22 @@ public:
 			}
 		} else if (ac == AdjustPhase)
 		{
-			if (param == 0)
-			{
-				return;
-			}
-			float oldWave[WAVESIZE];
-			for (int i = 0; i < WAVESIZE; i++)
-			{
-				oldWave[i] = mWave[i];
-			}
-			for (int i = 0; i < WAVESIZE; i++)
-			{
-				int target = (i + param)%WAVESIZE;
-				if (target < 0)
-				{
-					target += WAVESIZE;
-				}
-				mWave[i] = oldWave[target];
-			}
+			mOscOffset = param;
 		}
 	}
-
-	float mWave[WAVESIZE];
+	float getWaveValue(int pos) { return mWave[(pos+(int)(mOscOffset*WAVESIZE))%WAVESIZE]; }
+	float mWave[WAVESIZE], mOscOffset;
 };
 
+class Amplifier
+{
+public:
+	Amplifier()
+	{
+		mAmp = 1.0;
+	}
+	float mAmp;
+};
 
 //==============================================================================
 /**
@@ -250,8 +247,6 @@ public:
 	void changeProgramName (int /*index*/, const String& /*newName*/)		{ }
 	void setWaveTableValue(size_t table, int pos, float value);
 	WaveTable *getWaveTable(size_t table);
-	size_t getNumTables()
-	{ return mWaveTables.size(); }
 
 	float getWaveTableValue(size_t table, int pos);
 	float getWaveValue(float pos);
@@ -281,9 +276,10 @@ public:
 
 	//==============================================================================
 
-	std::vector<WaveTable *> mWaveTables;
-	std::vector<ADSRTable *> mADSRTables;
-	float mSourceFactor, mSmoothStrengthFactor, mSmoothRangeFactor;
+	WaveTable mWaveTables[NUMOSC];
+	ADSRTable mADSRTables[NUMDEVINST];
+	Amplifier mAmplifiers[NUMDEVINST];
+	float mSmoothStrengthFactor, mSmoothRangeFactor;
 
 private:
 	//==============================================================================
