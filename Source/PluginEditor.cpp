@@ -55,10 +55,8 @@
 
 	tabbedComponent->setOutline(0);
 	tabbedComponent->setTabBarDepth (30);
-	tabbedComponent->addTab ("ADSR", COMPBACKGROUND, comp, false);
-	tabbedComponent->addTab ("Tab 1", COMPBACKGROUND, 0, false);
-	tabbedComponent->addTab ("Tab 2", COMPBACKGROUND, 0, false);
-	tabbedComponent->setCurrentTabIndex (0);
+	tabbedComponent->addTab ("ADS", COMPBACKGROUND, comp, false);
+	tabbedComponent->setCurrentTabIndex(0);
 	tabbedComponent->setBounds (TabbedComponentPoints[0].getX(), TabbedComponentPoints[0].getY(), TABBOXWIDTH, TABOXHEIGHT);
 
 
