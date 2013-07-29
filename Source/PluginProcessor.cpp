@@ -519,12 +519,12 @@ void SimpleMorphSynth::setStateInformation (const void* data, int sizeInBytes)
 			for (size_t i = 0; i < NUMDEVINST; i++)
 			{
 				juce::String table = juce::String(i);
-				mADSRTables[i].mAttack = (float) xmlState->getDoubleAttribute(juce::String("attack") + table);
+				mADSRTables[i].mAttack =  std::max((float)xmlState->getDoubleAttribute(juce::String("attack") + table), DECLICK);
 				mADSRTables[i].mDecay = (float) xmlState->getDoubleAttribute(juce::String("decay") + table);
 				mADSRTables[i].mSustain = (float) xmlState->getDoubleAttribute(juce::String("sustain") + table, 1.0);
 				if (i == 0)
 				{
-					mADSRTables[i].mRelease = (float) xmlState->getDoubleAttribute(juce::String("release") + table);
+					mADSRTables[i].mRelease = std::max((float) xmlState->getDoubleAttribute(juce::String("release") + table), DECLICK);
 				}
 				mAmplifiers[i].mAmp = (float) xmlState->getDoubleAttribute(juce::String("amp") + table, 1.0);
 			}

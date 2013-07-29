@@ -73,10 +73,10 @@ class ADSRTable
 public:
 	ADSRTable()
 	{
-		mAttack = 0.0;
+		mAttack = DECLICK;
 		mDecay = 0.0;
 		mSustain = 1.0;
-		mRelease = 0.0;
+		mRelease = DECLICK;
 	}
 	float getMod(float pos, bool released, float releaseTime)
 	{
