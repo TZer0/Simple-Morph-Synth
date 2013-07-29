@@ -38,7 +38,7 @@ enum Action
 };
 
 #define LASTCOMMONPARAM AmpReleaseParam
-#define LASTSYNTHPARAM SynthReleaseParam
+#define LASTSYNTHPARAM SynthSustainParam
 #define TOTALNUMPARAMS (LastParam-LASTCOMMONPARAM+LASTSYNTHPARAM)
 #define SYNTHPARAMS (LASTSYNTHPARAM-LASTCOMMONPARAM)
 
@@ -46,6 +46,7 @@ enum Parameter
 {
 	SmoothStrengthParam = 0,
 	SmoothRangeParam,
+	SmoothJaggedParam,
 	AmpAttackParam,
 	AmpDecayParam,
 	AmpSustainParam,
@@ -56,7 +57,6 @@ enum Parameter
 	SynthAttackParam,
 	SynthDecayParam,
 	SynthSustainParam,
-	SynthReleaseParam,
 
 	LastParam,
 	NoneParam
@@ -77,6 +77,41 @@ public:
 		mDecay = 0.0;
 		mSustain = 1.0;
 		mRelease = 0.0;
+	}
+	float getMod(float pos, bool released, float releaseTime)
+	{
+		float outFac = 1.0;
+		if (pos < mAttack)
+		{
+			outFac *= (float) (pos/mAttack);
+		} else
+		{
+			pos -= mAttack;
+			if (pos < mDecay)
+			{
+				double decProg = pos/mDecay;
+				outFac *= (float) (mSustain * decProg + (1-decProg));
+			} else
+			{
+				outFac *= (float) mSustain;
+			}
+		}
+
+		if (released)
+		{
+			if (releaseTime < mRelease)
+			{
+				outFac *= (float) (1 - releaseTime/mRelease);
+			} else
+			{
+				outFac *= 0;
+			}
+		}
+		return outFac;
+	}
+	bool isReleased(float time)
+	{
+		return time > mRelease;
 	}
 	float mAttack, mDecay, mSustain, mRelease;
 };
@@ -227,6 +262,8 @@ public:
 	float getParameter (int index);
 	void setParameter (int index, float newValue);
 	const String getParameterName (int index);
+	const String getShortParameterName (int index);
+
 	const String getParameterText (int index);
 
 	const String getInputChannelName (int channelIndex) const;
@@ -249,7 +286,7 @@ public:
 	WaveTable *getWaveTable(size_t table);
 
 	float getWaveTableValue(size_t table, int pos);
-	float getWaveValue(float pos);
+	float getWaveValue(float pos, float time = -1, bool released = false, float releasetime = 0.0);
 
 	//==============================================================================
 	void getStateInformation (MemoryBlock& destData);
@@ -279,7 +316,7 @@ public:
 	WaveTable mWaveTables[NUMOSC];
 	ADSRTable mADSRTables[NUMDEVINST];
 	Amplifier mAmplifiers[NUMDEVINST];
-	float mSmoothStrengthFactor, mSmoothRangeFactor;
+	float mSmoothStrengthFactor, mSmoothRangeFactor, mSmoothJaggedFactor;
 
 private:
 	//==============================================================================

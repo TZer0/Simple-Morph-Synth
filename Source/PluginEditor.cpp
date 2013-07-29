@@ -26,6 +26,8 @@
 			ownerFilter->mLastUIHeight);
 	addSlider(SmoothStrengthParam, juce::Point<int>(380, 424), juce::Point<int>(16, 72));
 	addSlider(SmoothRangeParam, juce::Point<int>(400, 424), juce::Point<int>(16, 72));
+	addSlider(SmoothJaggedParam, juce::Point<int>(420, 424), juce::Point<int>(16, 72));
+
 	addSlider(SynthAmpParam, juce::Point<int>(350, 20), juce::Point<int>(20, (int) WAVEHEIGHT-40),0, 1, 0);
 	addSlider(SynthAmpParam, juce::Point<int>(370, 20), juce::Point<int>(20, (int) WAVEHEIGHT-40),0, 1, 1);
 
@@ -41,11 +43,21 @@
 	}
 
 	TabbedComponent *tabbedComponent;
+	Component *comp = new Component();
+	for (int i = 0; i < 2; i++)
+	{
+		for (int j = SynthAttackParam; j <= SynthSustainParam; j++)
+		{
+			addSlider((Parameter) j, juce::Point<int>((j-SynthAttackParam)*25 + i*75, 30), juce::Point<int>(20, 100), 0, 1.0, i, juce::Slider::LinearVertical, comp);
+		}
+	}
 	addAndMakeVisible (tabbedComponent = new TabbedComponent (TabbedButtonBar::TabsAtTop));
+
+	tabbedComponent->setOutline(0);
 	tabbedComponent->setTabBarDepth (30);
-	tabbedComponent->addTab ("Tab 0", Colour (0xff3e5659), 0, false);
-	tabbedComponent->addTab ("Tab 1", Colour (0xff314548), 0, false);
-	tabbedComponent->addTab ("Tab 2", Colour (0xff314548), 0, false);
+	tabbedComponent->addTab ("ADSR", COMPBACKGROUND, comp, false);
+	tabbedComponent->addTab ("Tab 1", COMPBACKGROUND, 0, false);
+	tabbedComponent->addTab ("Tab 2", COMPBACKGROUND, 0, false);
 	tabbedComponent->setCurrentTabIndex (0);
 	tabbedComponent->setBounds (TabbedComponentPoints[0].getX(), TabbedComponentPoints[0].getY(), TABBOXWIDTH, TABOXHEIGHT);
 
@@ -84,28 +96,37 @@
 	updateAllComponents();
 }
 
-void SimpleMorphSynthProcessorEditor::addSlider(Parameter param, juce::Point<int> point, 
-		juce::Point<int> size, double minVal, double maxVal, int target, juce::Slider::SliderStyle style)
+void SimpleMorphSynthProcessorEditor::addSlider(Parameter param, juce::Point<int> pos, 
+		juce::Point<int> size, double minVal, double maxVal, int target, juce::Slider::SliderStyle style,
+		Component *comp)
 {
 	ComponentContainer<Slider> cont;
 	cont.mParam = param;
-	cont.mLabel = new Label(getProcessor()->getParameterName(param));
+	cont.mLabel = new Label("", getProcessor()->getShortParameterName(GETPARAM(param, target)));
 	cont.mTarget = target;
-	Slider *sl = new Slider();
-	sl->setBounds(point.getX(), point.getY(), size.getX(), size.getY());
+	cont.mComponent = new Slider();
 
-	addAndMakeVisible(sl);
-	sl->setSliderStyle(style);
-	sl->setTextBoxStyle(juce::Slider::TextEntryBoxPosition::NoTextBox, false, 0, 0);
-	sl->addListener(this);
-	sl->setRange(minVal, maxVal, 0.01);
+	cont.mComponent->setBounds(pos.getX(), pos.getY(), size.getX(), size.getY());
 
-	cont.mComponent = sl;
 
-	
-	cont.mLabel->attachToComponent (sl, false);
+	cont.mComponent->setSliderStyle(style);
+	cont.mComponent->setTextBoxStyle(juce::Slider::TextEntryBoxPosition::NoTextBox, false, 0, 0);
+	cont.mComponent->addListener(this);
+	cont.mComponent->setRange(minVal, maxVal, 0.01);
+
+
+	cont.mLabel->attachToComponent (cont.mComponent, false);
 	cont.mLabel->setFont (Font (11.0f));
-	addAndMakeVisible(cont.mLabel);
+	cont.mLabel->setBounds(pos.getX()-7, pos.getY() + size.getY()-8, 300, 20);
+
+	if (comp == nullptr)
+	{
+		addAndMakeVisible(cont.mComponent);
+	} else
+	{
+		comp->addAndMakeVisible(cont.mComponent);
+	}
+	cont.mComponent->addAndMakeVisible(cont.mLabel);
 
 	mSliders.push_back(cont);
 }
@@ -280,7 +301,7 @@ void SimpleMorphSynthProcessorEditor::updateAllComponents()
 
 	for (size_t i = 0; i < mSliders.size(); i++)
 	{
-		mSliders[i].mComponent->setValue(synth->getParameter(mSliders[i].mParam + ((int)mSliders[i].mTarget)*SYNTHPARAMS), dontSendNotification);
+		mSliders[i].mComponent->setValue(synth->getParameter(GETPARAM(mSliders[i].mParam, mSliders[i].mTarget)), dontSendNotification);
 	}
 }
 
@@ -297,8 +318,7 @@ void SimpleMorphSynthProcessorEditor::sliderValueChanged (Slider* slider)
 				checkUserWaveBox(mSliders[i].mTarget);
 			}
 			
-			updateParam(mSliders[i].mParam + ((int)mSliders[i].mTarget)*SYNTHPARAMS,
-					(float) slider->getValue());
+			updateParam(GETPARAM(mSliders[i].mParam, mSliders[i].mTarget), (float) slider->getValue());
 			repaint();
 		}
 	}

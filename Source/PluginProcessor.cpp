@@ -37,7 +37,6 @@ public:
 	WaveTableVoice(SimpleMorphSynth *synth)
 		: mTimeDelta (0.0),
 		mCyclesPerSecond (0.0),
-		mTailOff (0.0),
 		mReleaseTime (0.0),
 		mReleased (false)
 {
@@ -55,7 +54,6 @@ public:
 		mReleased = false;
 		mCurrentTime = 0.0;
 		mLevel = velocity * 0.15;
-		mTailOff = 0.0;
 
 		mCyclesPerSecond = MidiMessage::getMidiNoteInHertz (midiNoteNumber);
 		mTimeDelta = 1 / getSampleRate();
@@ -93,52 +91,22 @@ public:
 	{
 		if (mTimeDelta != 0.0)
 		{
-			float attack = std::max(mSynth->mADSRTables[2].mAttack, DECLICK);
-			float decay = mSynth->mADSRTables[2].mDecay;
-			float sustain = mSynth->mADSRTables[2].mSustain;
-			float release = std::max(mSynth->mADSRTables[2].mRelease, DECLICK);
-
+			ADSRTable *table = &mSynth->mADSRTables[2];
 			while (--numSamples >= 0)
 			{
 				float pos = (float) (mCurrentTime * WAVESIZE * mCyclesPerSecond);
 
-				float currentSample = (float) (mSynth->getWaveValue(pos) * mLevel * (mTailOff > 0 ? mTailOff : 1));
-				double modTime = mCurrentTime;
-
-				if (modTime < attack && attack > 0)
+				float currentSample = (float) (mSynth->getWaveValue(pos, (float) mCurrentTime, mReleased, (float) mReleaseTime) * mLevel);
+				currentSample *= table->getMod((float) mCurrentTime, mReleased, (float) mReleaseTime);
+				if (mReleased)
 				{
-					currentSample *= (float) (modTime/attack);
-				} else
-				{
-					modTime -= attack;
-					if (modTime < decay && decay > 0)
+					mReleaseTime += mTimeDelta;
+					if (table->isReleased((float)mReleaseTime))
 					{
-						double decProg = modTime/decay;
-						currentSample *= (float) (sustain * decProg + (1-decProg));
-					} else
-					{
-						currentSample *= (float) sustain;
-					}
-				}
-
-				if (mReleased && release > 0)
-				{
-					if (mReleaseTime < release)
-					{
-						currentSample *= (float) (1 - mReleaseTime/release);
-						mReleaseTime += mTimeDelta;
-					} else
-					{
-						currentSample = 0;
-						//mReleased = false;
+						currentSample *= 0;
 						clearCurrentNote();
 					}
-				} else if (mReleased)
-				{
-					currentSample = 0;
-					clearCurrentNote();
 				}
-
 				for (int i = outputBuffer.getNumChannels(); --i >= 0;)
 					*outputBuffer.getSampleData (i, startSample) += currentSample;
 
@@ -149,7 +117,7 @@ public:
 	}
 
 private:
-	double mCurrentTime, mTimeDelta, mLevel, mTailOff, mCyclesPerSecond, mReleaseTime;
+	double mCurrentTime, mTimeDelta, mLevel, mCyclesPerSecond, mReleaseTime;
 	bool mReleased;
 	SimpleMorphSynth *mSynth;
 };
@@ -169,6 +137,7 @@ private:
 
 	mLastPosInfo.resetToDefault();
 	mDelayPosition = 0;
+	mSmoothJaggedFactor = 0;
 	mWaveTables[0] = WaveTable();
 	mWaveTables[1] = WaveTable();
 	mWaveTables[0].executeAction(SawFunc);
@@ -179,6 +148,10 @@ private:
 	for (int i = 0; i < 3; i++)
 	{
 		mADSRTables[i] = ADSRTable();
+		if (i < 2)
+		{
+			mADSRTables[i].mRelease = 1.0;
+		}
 	}
 
 	// Initialise the synth...
@@ -189,20 +162,28 @@ private:
 
 }
 
-float SimpleMorphSynth::getWaveValue(float pos)
+float SimpleMorphSynth::getWaveValue(float pos, float time, bool released, float releasetime)
 {
-	int range = (int) (mSmoothRangeFactor*16);
+	int range = (int) (mSmoothRangeFactor*32);
 	if (range < 1)
 	{
 		range = 1;
 	}
+	int minJumps = 1 + (range > 16) + (range > 24) * 2;
+	int jumps = std::min(std::max(minJumps, (int) (mSmoothJaggedFactor*16)), range);
+	if (range > jumps)
+	{
+		range -= (range % jumps);
+	}
+
 	int curSampPos = (int) pos;
 	float posOffset = (float) pos-curSampPos;
 	float outVal = 0.f;
 	float regTotal = 0.0;
 	for (size_t i = 0; i < NUMOSC; i++)
 	{
-		for (int j = -range; j <= range; j++)
+		float tmpVal = 0;
+		for (int j = -range; j <= range; j += jumps)
 		{
 			int aPos = (curSampPos+j)%WAVESIZE;
 			if (aPos < 0)
@@ -213,8 +194,9 @@ float SimpleMorphSynth::getWaveValue(float pos)
 			float to = mWaveTables[i].getWaveValue(aPos+1);
 			float smooth = (range-std::abs(j)*mSmoothStrengthFactor);
 			regTotal += smooth;
-			outVal += mAmplifiers[i].mAmp *(from*(1-posOffset) + to*posOffset) * smooth * 2;
+			tmpVal += mAmplifiers[i].mAmp *(from*(1-posOffset) + to*posOffset) * smooth * 2;
 		}
+		outVal += tmpVal * (time > 0 ? mADSRTables[i].getMod(time, released, releasetime) : 1);
 	}
 	if (regTotal > 0.1f)
 	{
@@ -273,6 +255,7 @@ float SimpleMorphSynth::getParameter (int index)
 	{
 		case SmoothStrengthParam:		return mSmoothStrengthFactor;
 		case SmoothRangeParam:			return mSmoothRangeFactor;
+		case SmoothJaggedParam:			return mSmoothJaggedFactor;
 		case AmpAttackParam:			return mADSRTables[2].mAttack;
 		case AmpSustainParam:			return mADSRTables[2].mSustain;
 		case AmpDecayParam:				return mADSRTables[2].mDecay;
@@ -281,7 +264,6 @@ float SimpleMorphSynth::getParameter (int index)
 		case SynthAttackParam:			return mADSRTables[target].mAttack;
 		case SynthSustainParam:			return mADSRTables[target].mSustain;
 		case SynthDecayParam:			return mADSRTables[target].mDecay;
-		case SynthReleaseParam:			return mADSRTables[target].mRelease;
 		default:						return 0.0f;
 	}
 }
@@ -299,6 +281,7 @@ const String SimpleMorphSynth::getParameterName (int index)
 	{
 		case SmoothStrengthParam:		return "SmoothStrength";
 		case SmoothRangeParam:			return "SmoothRange";
+		case SmoothJaggedParam:			return "SmoothJagged";
 		case AmpAttackParam:			return "AmpAttackParam";
 		case AmpDecayParam:				return "AmpDecayParam";
 		case AmpReleaseParam:			return "AmpReleaseParam";
@@ -308,7 +291,36 @@ const String SimpleMorphSynth::getParameterName (int index)
 		case SynthAttackParam:			return juce::String("SynthAttackParam") + tOsc;
 		case SynthDecayParam:			return juce::String("SyntDecayParam") + tOsc;
 		case SynthSustainParam:			return juce::String("SynthSustainParam") + tOsc;
-		case SynthReleaseParam:			return juce::String("SynthReleaseParam") + tOsc;
+
+		default:				break;
+	}
+
+	return "Undefined parameter name.";
+}
+
+const String SimpleMorphSynth::getShortParameterName (int index)
+{
+	int target = 0;
+	if (index >= LastParam)
+	{
+		index = index - SYNTHPARAMS;
+		target++;
+	}
+	juce::String tOsc =  juce::String(target+1);
+	switch (index)
+	{
+		case SmoothStrengthParam:		return "STR";
+		case SmoothRangeParam:			return "RAN";
+		case SmoothJaggedParam:			return "JAG";
+		case AmpAttackParam:			return "ATK";
+		case AmpDecayParam:				return "DCY";
+		case AmpReleaseParam:			return "REL";
+		case AmpSustainParam:			return "SUS";
+		case AdjustPhaseParam:			return "PHASE";
+		case SynthAmpParam:				return juce::String("AMP") + tOsc;
+		case SynthAttackParam:			return juce::String("ATK") + tOsc;
+		case SynthDecayParam:			return juce::String("DCY") + tOsc;
+		case SynthSustainParam:			return juce::String("SUS") + tOsc;
 
 		default:				break;
 	}
@@ -333,16 +345,16 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 	{
 		case SmoothStrengthParam:		mSmoothStrengthFactor = newValue; break;
 		case SmoothRangeParam:			mSmoothRangeFactor = newValue; break;
-		case AmpAttackParam:			mADSRTables[2].mAttack = newValue; break;
+		case SmoothJaggedParam:			mSmoothJaggedFactor = newValue; break;
+		case AmpAttackParam:			mADSRTables[2].mAttack = std::max(newValue, DECLICK); break;
 		case AmpSustainParam:			mADSRTables[2].mSustain = newValue; break;
 		case AmpDecayParam:				mADSRTables[2].mDecay = newValue; break;
-		case AmpReleaseParam:			mADSRTables[2].mRelease = newValue; break;
+		case AmpReleaseParam:			mADSRTables[2].mRelease = std::max(newValue, DECLICK); break;
 		case SynthAmpParam:				mAmplifiers[target].mAmp = newValue; break;
 		case AdjustPhaseParam:			mWaveTables[target].executeAction(AdjustPhase, newValue); break;
-		case SynthAttackParam:			mADSRTables[target].mAttack = newValue; break;
+		case SynthAttackParam:			mADSRTables[target].mAttack = std::max(newValue, DECLICK); break;
 		case SynthSustainParam:			mADSRTables[target].mSustain = newValue; break;
 		case SynthDecayParam:			mADSRTables[target].mDecay = newValue; break;
-		case SynthReleaseParam:			mADSRTables[target].mRelease = newValue; break;
 		default:   break;
 
 	}
@@ -448,8 +460,9 @@ void SimpleMorphSynth::getStateInformation (MemoryBlock& destData)
 
 	XmlElement xml ("SIMPLEMORPHSSYNTH");
 
-	xml.setAttribute ("mSmoothStrengthFactor", mSmoothStrengthFactor);
-	xml.setAttribute ("mSmoothRangeFactor", mSmoothRangeFactor);
+	xml.setAttribute ("smoothstrength", mSmoothStrengthFactor);
+	xml.setAttribute ("smoothrange", mSmoothRangeFactor);
+	xml.setAttribute ("smoothjagged", mSmoothJaggedFactor);
 
 	for (size_t w = 0; w < NUMOSC; w++) 
 	{
@@ -466,8 +479,12 @@ void SimpleMorphSynth::getStateInformation (MemoryBlock& destData)
 		xml.setAttribute(juce::String("attack") + table, mADSRTables[i].mAttack);
 		xml.setAttribute(juce::String("decay") + table, mADSRTables[i].mDecay);
 		xml.setAttribute(juce::String("sustain") + table, mADSRTables[i].mSustain);
-		xml.setAttribute(juce::String("release") + table, mADSRTables[i].mRelease);
+		if (i == 0)
+		{
+			xml.setAttribute(juce::String("release") + table, mADSRTables[i].mRelease);
+		}
 		xml.setAttribute(juce::String("amp") + table, mAmplifiers[i].mAmp);
+		
 	}
 
 	// then use this helper function to stuff it into the binary blob and return it..
@@ -487,8 +504,9 @@ void SimpleMorphSynth::setStateInformation (const void* data, int sizeInBytes)
 	{
 		if (xmlState->hasTagName ("SIMPLEMORPHSSYNTH"))
 		{
-			mSmoothStrengthFactor  = (float) xmlState->getDoubleAttribute ("mSmoothStrengthFactor", 0.0);
-			mSmoothRangeFactor  = (float) xmlState->getDoubleAttribute ("mSmoothRangeFactor", 1.0);
+			mSmoothStrengthFactor  = (float) xmlState->getDoubleAttribute ("smoothstrength", 0.0);
+			mSmoothRangeFactor  = (float) xmlState->getDoubleAttribute ("smoothrange", 0.0);
+			mSmoothJaggedFactor = (float) xmlState->getDoubleAttribute("smoothjagged", 0.0);
 			for (size_t w = 0; w < NUMOSC; w++) 
 			{
 				for (size_t i = 0; i < WAVESIZE; i++)
@@ -504,7 +522,10 @@ void SimpleMorphSynth::setStateInformation (const void* data, int sizeInBytes)
 				mADSRTables[i].mAttack = (float) xmlState->getDoubleAttribute(juce::String("attack") + table);
 				mADSRTables[i].mDecay = (float) xmlState->getDoubleAttribute(juce::String("decay") + table);
 				mADSRTables[i].mSustain = (float) xmlState->getDoubleAttribute(juce::String("sustain") + table, 1.0);
-				mADSRTables[i].mRelease = (float) xmlState->getDoubleAttribute(juce::String("release") + table);
+				if (i == 0)
+				{
+					mADSRTables[i].mRelease = (float) xmlState->getDoubleAttribute(juce::String("release") + table);
+				}
 				mAmplifiers[i].mAmp = (float) xmlState->getDoubleAttribute(juce::String("amp") + table, 1.0);
 			}
 		}

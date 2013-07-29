@@ -4,6 +4,8 @@
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "PluginProcessor.h"
 
+#define GETPARAM(param, target) (param + ((int)target)*SYNTHPARAMS)
+
 #define PRESETACTIONBUTTONSIZE 25
 #define OSCBOXWIDTH 312.f
 #define OSCBOXOFFSET 8
@@ -97,7 +99,7 @@ private:
 	void buttonClicked(Button *button);
 	void buttonStateChanged(Button *);
 	void addSlider(Parameter param, juce::Point<int> point, juce::Point<int> size, double minVal = 0.0, double maxVal = 1.0, int target = 0,
-			juce::Slider::SliderStyle style = juce::Slider::SliderStyle::LinearVertical);
+			juce::Slider::SliderStyle style = juce::Slider::SliderStyle::LinearVertical, Component *comp = nullptr);
 	void checkUserWaveBox(int target);
 	void updateParam(int param, float val);
 
