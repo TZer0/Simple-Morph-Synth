@@ -34,13 +34,15 @@ public:
 class WaveTableVoice  : public SynthesiserVoice
 {
 public:
-	WaveTableVoice(SimpleMorphSynth *synth)
+	WaveTableVoice(SimpleMorphSynth *proc)
 		: mTimeDelta (0.0),
 		mCyclesPerSecond (0.0),
 		mReleaseTime (0.0),
 		mReleased (false)
 {
-	mSynth = synth;
+	mProc = proc;
+	mDone = true;
+	mDeclickPreviousNote = false;
 }
 
 	bool canPlaySound (SynthesiserSound* sound)
@@ -51,12 +53,27 @@ public:
 	void startNote (const int midiNoteNumber, const float velocity,
 			SynthesiserSound* /*sound*/, const int /*currentPitchWheelPosition*/)
 	{
+		for (int i = 0; i < mProc->mSynth.getNumVoices(); i++)
+		{
+			auto *voice = mProc->mSynth.getVoice(i);
+			if (midiNoteNumber == voice->getCurrentlyPlayingNote())
+			{
+				voice->stopNote(false);
+				break;
+			}
+		}
+		clearCurrentNote();
 		mReleased = false;
+		mDone = false;
 		mCurrentTime = 0.0;
+		mReleaseTime = 0.0;
 		mLevel = velocity * 0.15;
 
 		mCyclesPerSecond = MidiMessage::getMidiNoteInHertz (midiNoteNumber);
 		mTimeDelta = 1 / getSampleRate();
+		mCoeff.makeLowPass(getSampleRate(), 400);
+		mFilter.setCoefficients(mCoeff);
+		mFilter.reset();
 	}
 
 	void stopNote (const bool allowTailOff)
@@ -71,61 +88,89 @@ public:
 		else
 		{
 			// we're being told to stop playing immediately, so reset everything..
-
-			clearCurrentNote();
-			mTimeDelta = 0.0;
+			clear();
+			mDeclickPreviousNote = true;
 		}
+	}
+
+	void clear()
+	{
+		
+		clearCurrentNote();
+		mDone = true;
+		mReleaseTime = 0.0;
+		mReleased = false;
+		mCurrentTime = 0.0;
 	}
 
 	void pitchWheelMoved (const int /*newValue*/)
 	{
-		// can't be bothered implementing this for the demo!
 	}
 
 	void controllerMoved (const int /*controllerNumber*/, const int /*newValue*/)
 	{
-		// not interested in controllers in this case.
 	}
 
 	void renderNextBlock (AudioSampleBuffer& outputBuffer, int startSample, int numSamples)
 	{
+		if (mDone)
+		{
+			return;
+		}
+		int cnt = numSamples;
 		if (mTimeDelta != 0.0)
 		{
-			ADSRTable *table = &mSynth->mADSRTables[2];
-			while (--numSamples >= 0)
+			ADSRTable *table = &mProc->mADSRTables[2];
+			while (--cnt >= 0)
 			{
 				float pos = (float) (mCurrentTime * WAVESIZE * mCyclesPerSecond);
 
-				float currentSample = (float) (mSynth->getWaveValue(pos, (float) mCurrentTime, mReleased, (float) mReleaseTime) * mLevel);
+				float currentSample = (float) (mProc->getWaveValue(pos, (float) mCurrentTime, mReleased, (float) mReleaseTime) * mLevel);
 				currentSample *= table->getMod((float) mCurrentTime, mReleased, (float) mReleaseTime);
 				if (mReleased)
 				{
 					mReleaseTime += mTimeDelta;
 					if (table->isReleased((float)mReleaseTime))
 					{
-						currentSample *= 0;
-						clearCurrentNote();
+						clear();
+						mDeclickPreviousNote = false;
+						return;
 					}
 				}
 				for (int i = outputBuffer.getNumChannels(); --i >= 0;)
-					*outputBuffer.getSampleData (i, startSample) += currentSample;
-
+				{
+					float *ptr = outputBuffer.getSampleData (i, startSample);
+					*ptr += currentSample;
+					if (mDeclickPreviousNote && i < mLastLevels.size())
+					{
+						 *ptr += mLastLevels[i] * std::max(0., ((NOTEDECLICK-mCurrentTime)/NOTEDECLICK));
+					}
+				}
+				
 				mCurrentTime += mTimeDelta;
 				++startSample;
 			}
+			mLastLevels.clear();
+			for (int i = outputBuffer.getNumChannels(); --i >= 0;)
+			{
+				mLastLevels.push_back(*outputBuffer.getSampleData(i, startSample-1));
+			}
+			//mFilter.processSamples(outputBuffer.getSampleData(0), outputBuffer.getNumSamples());
 		}
 	}
 
 private:
 	double mCurrentTime, mTimeDelta, mLevel, mCyclesPerSecond, mReleaseTime;
-	bool mReleased;
-	SimpleMorphSynth *mSynth;
+	std::vector<float> mLastLevels;
+	bool mReleased, mDone, mDeclickPreviousNote;
+	IIRFilter mFilter;
+	IIRCoefficients mCoeff;
+	SimpleMorphSynth *mProc;
 };
 
 
 //==============================================================================
 	SimpleMorphSynth::SimpleMorphSynth()
-: mDelayBuffer (2, 12000)
 {
 	mUpdateEditor = true;
 	// Set up some default values..
@@ -136,7 +181,6 @@ private:
 	mLastUIHeight = WINDOWHEIGHT;
 
 	mLastPosInfo.resetToDefault();
-	mDelayPosition = 0;
 	mSmoothJaggedFactor = 0;
 	mWaveTables[0] = WaveTable();
 	mWaveTables[1] = WaveTable();
@@ -154,12 +198,12 @@ private:
 		}
 	}
 
-	// Initialise the synth...
-	for (int i = 4; --i >= 0;)
-		mSynth.addVoice (new WaveTableVoice(this));		// These voices will play our custom sine-wave sounds..
+
+	
+	mVoiceFactor = 0.25;
+	adjustVoices();
 
 	mSynth.addSound (new WaveTableSound());
-
 }
 
 float SimpleMorphSynth::getWaveValue(float pos, float time, bool released, float releasetime)
@@ -256,6 +300,7 @@ float SimpleMorphSynth::getParameter (int index)
 		case SmoothStrengthParam:		return mSmoothStrengthFactor;
 		case SmoothRangeParam:			return mSmoothRangeFactor;
 		case SmoothJaggedParam:			return mSmoothJaggedFactor;
+		case AdjustVoices:				return mVoiceFactor;
 		case AmpAttackParam:			return mADSRTables[2].mAttack;
 		case AmpSustainParam:			return mADSRTables[2].mSustain;
 		case AmpDecayParam:				return mADSRTables[2].mDecay;
@@ -282,6 +327,7 @@ const String SimpleMorphSynth::getParameterName (int index)
 		case SmoothStrengthParam:		return "SmoothStrength";
 		case SmoothRangeParam:			return "SmoothRange";
 		case SmoothJaggedParam:			return "SmoothJagged";
+		case AdjustVoices:				return "VoiceFactor";
 		case AmpAttackParam:			return "AmpAttackParam";
 		case AmpDecayParam:				return "AmpDecayParam";
 		case AmpReleaseParam:			return "AmpReleaseParam";
@@ -289,7 +335,7 @@ const String SimpleMorphSynth::getParameterName (int index)
 		case AdjustPhaseParam:			return juce::String("AdjustOSCPhase") + tOsc;
 		case SynthAmpParam:				return juce::String("SynthAmpParam") + tOsc;
 		case SynthAttackParam:			return juce::String("SynthAttackParam") + tOsc;
-		case SynthDecayParam:			return juce::String("SyntDecayParam") + tOsc;
+		case SynthDecayParam:			return juce::String("SynthDecayParam") + tOsc;
 		case SynthSustainParam:			return juce::String("SynthSustainParam") + tOsc;
 
 		default:				break;
@@ -312,6 +358,7 @@ const String SimpleMorphSynth::getShortParameterName (int index)
 		case SmoothStrengthParam:		return "STR";
 		case SmoothRangeParam:			return "RAN";
 		case SmoothJaggedParam:			return "JAG";
+		case AdjustVoices:				return "VCY";
 		case AmpAttackParam:			return "ATK";
 		case AmpDecayParam:				return "DCY";
 		case AmpReleaseParam:			return "REL";
@@ -346,6 +393,7 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 		case SmoothStrengthParam:		mSmoothStrengthFactor = newValue; break;
 		case SmoothRangeParam:			mSmoothRangeFactor = newValue; break;
 		case SmoothJaggedParam:			mSmoothJaggedFactor = newValue; break;
+		case AdjustVoices:				mVoiceFactor = newValue; adjustVoices(); break;
 		case AmpAttackParam:			mADSRTables[2].mAttack = std::max(newValue, DECLICK); break;
 		case AmpSustainParam:			mADSRTables[2].mSustain = newValue; break;
 		case AmpDecayParam:				mADSRTables[2].mDecay = newValue; break;
@@ -360,6 +408,20 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 	}
 }
 
+void SimpleMorphSynth::adjustVoices()
+{
+	int voices = std::max(1, (int) (mVoiceFactor*16));
+	
+	while (voices > mSynth.getNumVoices())
+	{
+		mSynth.addVoice (new WaveTableVoice(this));
+	}
+
+	while (voices < mSynth.getNumVoices())
+	{
+		mSynth.removeVoice(mSynth.getNumVoices()-1);
+	}
+}
 
 const String SimpleMorphSynth::getParameterText (int index)
 {
@@ -373,7 +435,6 @@ void SimpleMorphSynth::prepareToPlay (double sampleRate, int /*samplesPerBlock*/
 	// initialisation that you need..
 	mSynth.setCurrentPlaybackSampleRate (sampleRate);
 	mKeyboardState.reset();
-	mDelayBuffer.clear();
 }
 
 void SimpleMorphSynth::releaseResources()
@@ -385,19 +446,19 @@ void SimpleMorphSynth::releaseResources()
 
 void SimpleMorphSynth::reset()
 {
-	// Use this method as the place to clear any delay lines, buffers, etc, as it
-	// means there's been a break in the audio's continuity.
-	mDelayBuffer.clear();
+
 }
 
 void SimpleMorphSynth::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages)
 {
 	const int numSamples = buffer.getNumSamples();
-	int channel, dp = 0;
+	int channel;
 
 	// Go through the incoming data, and apply our gain to it...
 	for (channel = 0; channel < getNumInputChannels(); ++channel)
+	{
 		buffer.applyGain (channel, 0, buffer.getNumSamples(), 1);
+	}
 
 	// Now pass any incoming midi messages to our keyboard state object, and let it
 	// add messages to the buffer if the user is clicking on the on-screen keys
@@ -423,13 +484,14 @@ void SimpleMorphSynth::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midi
 	  }
 	  }*/
 
-	mDelayPosition = dp;
 
 	// In case we have more outputs than inputs, we'll clear any output
 	// channels that didn't contain input data, (because these aren't
 	// guaranteed to be empty - they may contain garbage).
 	for (int i = getNumInputChannels(); i < getNumOutputChannels(); ++i)
+	{
 		buffer.clear (i, 0, buffer.getNumSamples());
+	}
 
 	// ask the host for the current time so we can display it...
 	AudioPlayHead::CurrentPositionInfo newTime;
@@ -479,13 +541,13 @@ void SimpleMorphSynth::getStateInformation (MemoryBlock& destData)
 		xml.setAttribute(juce::String("attack") + table, mADSRTables[i].mAttack);
 		xml.setAttribute(juce::String("decay") + table, mADSRTables[i].mDecay);
 		xml.setAttribute(juce::String("sustain") + table, mADSRTables[i].mSustain);
-		if (i == 0)
+		if (i == 2)
 		{
 			xml.setAttribute(juce::String("release") + table, mADSRTables[i].mRelease);
 		}
 		xml.setAttribute(juce::String("amp") + table, mAmplifiers[i].mAmp);
 		
-	}
+	} 
 
 	// then use this helper function to stuff it into the binary blob and return it..
 	copyXmlToBinary (xml, destData);
@@ -522,7 +584,7 @@ void SimpleMorphSynth::setStateInformation (const void* data, int sizeInBytes)
 				mADSRTables[i].mAttack =  std::max((float)xmlState->getDoubleAttribute(juce::String("attack") + table), DECLICK);
 				mADSRTables[i].mDecay = (float) xmlState->getDoubleAttribute(juce::String("decay") + table);
 				mADSRTables[i].mSustain = (float) xmlState->getDoubleAttribute(juce::String("sustain") + table, 1.0);
-				if (i == 0)
+				if (i == 2)
 				{
 					mADSRTables[i].mRelease = std::max((float) xmlState->getDoubleAttribute(juce::String("release") + table), DECLICK);
 				}

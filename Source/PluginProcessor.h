@@ -17,7 +17,7 @@
 #define WAVEHEIGHT 176.f
 #define TABLESPACING 8.f
 #define DECLICK 0.005f
-
+#define NOTEDECLICK 0.005f
 #define WINDOWWIDTH 720
 #define WINDOWHEIGHT 520
 
@@ -51,6 +51,7 @@ enum Parameter
 	AmpDecayParam,
 	AmpSustainParam,
 	AmpReleaseParam,
+	AdjustVoices,
 
 	AdjustPhaseParam,
 	SynthAmpParam,
@@ -316,14 +317,14 @@ public:
 	WaveTable mWaveTables[NUMOSC];
 	ADSRTable mADSRTables[NUMDEVINST];
 	Amplifier mAmplifiers[NUMDEVINST];
-	float mSmoothStrengthFactor, mSmoothRangeFactor, mSmoothJaggedFactor;
+	float mSmoothStrengthFactor, mSmoothRangeFactor, mSmoothJaggedFactor, mVoiceFactor;
+	Synthesiser mSynth;
+
 
 private:
 	//==============================================================================
-	AudioSampleBuffer mDelayBuffer;
-	int mDelayPosition;
+	void adjustVoices();
 
-	Synthesiser mSynth;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SimpleMorphSynth)
 };
