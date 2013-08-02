@@ -29,6 +29,7 @@
 	addSlider(SmoothJaggedParam, juce::Point<int>(420, 424), juce::Point<int>(16, 72));
 
 	addSlider(AdjustVoices, juce::Point<int>(30, 424), juce::Point<int>(16, 72));
+	addSlider(AdjustSampleRate, juce::Point<int>(50, 424), juce::Point<int>(16, 72));
 
 	addSlider(SynthAmpParam, juce::Point<int>(350, 20), juce::Point<int>(20, (int) WAVEHEIGHT-40),0, 1, 0);
 	addSlider(SynthAmpParam, juce::Point<int>(370, 20), juce::Point<int>(20, (int) WAVEHEIGHT-40),0, 1, 1);

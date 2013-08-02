@@ -20,6 +20,7 @@
 #define NOTEDECLICK 0.005f
 #define WINDOWWIDTH 720
 #define WINDOWHEIGHT 520
+#define MAXSAMPLERATE 0.5
 
 #define LASTRADIOACTION Action::UserFunc
 
@@ -52,6 +53,7 @@ enum Parameter
 	AmpSustainParam,
 	AmpReleaseParam,
 	AdjustVoices,
+	AdjustSampleRate,
 
 	AdjustPhaseParam,
 	SynthAmpParam,
@@ -317,7 +319,7 @@ public:
 	WaveTable mWaveTables[NUMOSC];
 	ADSRTable mADSRTables[NUMDEVINST];
 	Amplifier mAmplifiers[NUMDEVINST];
-	float mSmoothStrengthFactor, mSmoothRangeFactor, mSmoothJaggedFactor, mVoiceFactor;
+	float mSmoothStrengthFactor, mSmoothRangeFactor, mSmoothJaggedFactor, mVoiceFactor, mSampleRate;
 	Synthesiser mSynth;
 
 

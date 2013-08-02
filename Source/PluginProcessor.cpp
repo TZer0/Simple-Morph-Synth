@@ -38,11 +38,13 @@ public:
 		: mTimeDelta (0.0),
 		mCyclesPerSecond (0.0),
 		mReleaseTime (0.0),
-		mReleased (false)
+		mResampleTime(0.0),
+		mReleased (false),
+		mDone(true),
+		mDeclickPreviousNote(false),
+		mProc(proc)
 {
-	mProc = proc;
-	mDone = true;
-	mDeclickPreviousNote = false;
+
 }
 
 	bool canPlaySound (SynthesiserSound* sound)
@@ -120,47 +122,61 @@ public:
 		int cnt = numSamples;
 		if (mTimeDelta != 0.0)
 		{
+			double resampleSteps = (1.f/mCyclesPerSecond) * MAXSAMPLERATE * mProc->mSampleRate;
 			ADSRTable *table = &mProc->mADSRTables[2];
 			while (--cnt >= 0)
 			{
 				float pos = (float) (mCurrentTime * WAVESIZE * mCyclesPerSecond);
 
-				float currentSample = (float) (mProc->getWaveValue(pos, (float) mCurrentTime, mReleased, (float) mReleaseTime) * mLevel);
-				currentSample *= table->getMod((float) mCurrentTime, mReleased, (float) mReleaseTime);
+				float currentSample = 0.0;
+				mCurrentTime += mTimeDelta;
+				mResampleTime += mTimeDelta;
+				if (mResampleTime > resampleSteps || mLastLevels.size() == 0)
+				{
+					currentSample = (float) (mProc->getWaveValue(pos, (float) mCurrentTime, mReleased, (float) mReleaseTime));
+					mResampleTime -= resampleSteps;
+					currentSample *= table->getMod((float) mCurrentTime, mReleased, (float) mReleaseTime);
+					currentSample *= (float) mLevel;
+					mLastLevels.clear();
+					for (int i = outputBuffer.getNumChannels(); --i >= 0;)
+					{
+						mLastLevels.push_back(currentSample);
+					}
+				} else
+				{
+					currentSample = mLastLevels[0];
+				}
+
 				if (mReleased)
 				{
 					mReleaseTime += mTimeDelta;
 					if (table->isReleased((float)mReleaseTime))
 					{
-						clear();
-						mDeclickPreviousNote = false;
-						return;
+							clear();
+							mDeclickPreviousNote = false;
+							return;
 					}
 				}
+
 				for (int i = outputBuffer.getNumChannels(); --i >= 0;)
 				{
 					float *ptr = outputBuffer.getSampleData (i, startSample);
 					*ptr += currentSample;
-					if (mDeclickPreviousNote && i < mLastLevels.size())
+					if (mDeclickPreviousNote && i < (int) mLastLevels.size())
 					{
-						 *ptr += mLastLevels[i] * std::max(0., ((NOTEDECLICK-mCurrentTime)/NOTEDECLICK));
+						 *ptr += (float) (mLastLevels[i] * std::max(0., ((NOTEDECLICK-mCurrentTime)/NOTEDECLICK)));
 					}
 				}
 				
-				mCurrentTime += mTimeDelta;
 				++startSample;
 			}
-			mLastLevels.clear();
-			for (int i = outputBuffer.getNumChannels(); --i >= 0;)
-			{
-				mLastLevels.push_back(*outputBuffer.getSampleData(i, startSample-1));
-			}
+			
 			//mFilter.processSamples(outputBuffer.getSampleData(0), outputBuffer.getNumSamples());
 		}
 	}
 
 private:
-	double mCurrentTime, mTimeDelta, mLevel, mCyclesPerSecond, mReleaseTime;
+	double mCurrentTime, mTimeDelta, mLevel, mCyclesPerSecond, mReleaseTime, mResampleTime;
 	std::vector<float> mLastLevels;
 	bool mReleased, mDone, mDeclickPreviousNote;
 	IIRFilter mFilter;
@@ -172,6 +188,7 @@ private:
 //==============================================================================
 	SimpleMorphSynth::SimpleMorphSynth()
 {
+	mSampleRate = 0.0;
 	mUpdateEditor = true;
 	// Set up some default values..
 	mSmoothStrengthFactor = mSmoothRangeFactor = 0;
@@ -301,6 +318,7 @@ float SimpleMorphSynth::getParameter (int index)
 		case SmoothRangeParam:			return mSmoothRangeFactor;
 		case SmoothJaggedParam:			return mSmoothJaggedFactor;
 		case AdjustVoices:				return mVoiceFactor;
+		case AdjustSampleRate:			return mSampleRate;
 		case AmpAttackParam:			return mADSRTables[2].mAttack;
 		case AmpSustainParam:			return mADSRTables[2].mSustain;
 		case AmpDecayParam:				return mADSRTables[2].mDecay;
@@ -328,6 +346,7 @@ const String SimpleMorphSynth::getParameterName (int index)
 		case SmoothRangeParam:			return "SmoothRange";
 		case SmoothJaggedParam:			return "SmoothJagged";
 		case AdjustVoices:				return "VoiceFactor";
+		case AdjustSampleRate:			return "SampleRate";
 		case AmpAttackParam:			return "AmpAttackParam";
 		case AmpDecayParam:				return "AmpDecayParam";
 		case AmpReleaseParam:			return "AmpReleaseParam";
@@ -359,6 +378,7 @@ const String SimpleMorphSynth::getShortParameterName (int index)
 		case SmoothRangeParam:			return "RAN";
 		case SmoothJaggedParam:			return "JAG";
 		case AdjustVoices:				return "VCY";
+		case AdjustSampleRate:			return "SAR";
 		case AmpAttackParam:			return "ATK";
 		case AmpDecayParam:				return "DCY";
 		case AmpReleaseParam:			return "REL";
@@ -394,6 +414,7 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 		case SmoothRangeParam:			mSmoothRangeFactor = newValue; break;
 		case SmoothJaggedParam:			mSmoothJaggedFactor = newValue; break;
 		case AdjustVoices:				mVoiceFactor = newValue; adjustVoices(); break;
+		case AdjustSampleRate:				mSampleRate = newValue; break;
 		case AmpAttackParam:			mADSRTables[2].mAttack = std::max(newValue, DECLICK); break;
 		case AmpSustainParam:			mADSRTables[2].mSustain = newValue; break;
 		case AmpDecayParam:				mADSRTables[2].mDecay = newValue; break;
@@ -522,9 +543,10 @@ void SimpleMorphSynth::getStateInformation (MemoryBlock& destData)
 
 	XmlElement xml ("SIMPLEMORPHSSYNTH");
 
-	xml.setAttribute ("smoothstrength", mSmoothStrengthFactor);
-	xml.setAttribute ("smoothrange", mSmoothRangeFactor);
-	xml.setAttribute ("smoothjagged", mSmoothJaggedFactor);
+	xml.setAttribute("smoothstrength", mSmoothStrengthFactor);
+	xml.setAttribute("smoothrange", mSmoothRangeFactor);
+	xml.setAttribute("smoothjagged", mSmoothJaggedFactor);
+	xml.setAttribute("bits", mSampleRate); 
 
 	for (size_t w = 0; w < NUMOSC; w++) 
 	{
@@ -569,6 +591,7 @@ void SimpleMorphSynth::setStateInformation (const void* data, int sizeInBytes)
 			mSmoothStrengthFactor  = (float) xmlState->getDoubleAttribute ("smoothstrength", 0.0);
 			mSmoothRangeFactor  = (float) xmlState->getDoubleAttribute ("smoothrange", 0.0);
 			mSmoothJaggedFactor = (float) xmlState->getDoubleAttribute("smoothjagged", 0.0);
+			mSampleRate = (float) xmlState->getDoubleAttribute("bits", 1.0);
 			for (size_t w = 0; w < NUMOSC; w++) 
 			{
 				for (size_t i = 0; i < WAVESIZE; i++)
