@@ -414,7 +414,7 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 		case SmoothRangeParam:			mSmoothRangeFactor = newValue; break;
 		case SmoothJaggedParam:			mSmoothJaggedFactor = newValue; break;
 		case AdjustVoices:				mVoiceFactor = newValue; adjustVoices(); break;
-		case AdjustSampleRate:				mSampleRate = newValue; break;
+		case AdjustSampleRate:			mSampleRate = newValue; break;
 		case AmpAttackParam:			mADSRTables[2].mAttack = std::max(newValue, DECLICK); break;
 		case AmpSustainParam:			mADSRTables[2].mSustain = newValue; break;
 		case AmpDecayParam:				mADSRTables[2].mDecay = newValue; break;
@@ -591,7 +591,7 @@ void SimpleMorphSynth::setStateInformation (const void* data, int sizeInBytes)
 			mSmoothStrengthFactor  = (float) xmlState->getDoubleAttribute ("smoothstrength", 0.0);
 			mSmoothRangeFactor  = (float) xmlState->getDoubleAttribute ("smoothrange", 0.0);
 			mSmoothJaggedFactor = (float) xmlState->getDoubleAttribute("smoothjagged", 0.0);
-			mSampleRate = (float) xmlState->getDoubleAttribute("bits", 1.0);
+			mSampleRate = (float) xmlState->getDoubleAttribute("bits", 0.0);
 			for (size_t w = 0; w < NUMOSC; w++) 
 			{
 				for (size_t i = 0; i < WAVESIZE; i++)
