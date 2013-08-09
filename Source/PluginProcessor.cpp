@@ -122,7 +122,13 @@ public:
 		int cnt = numSamples;
 		if (mTimeDelta != 0.0)
 		{
-			double resampleSteps = (1.f/mCyclesPerSecond) * MAXSAMPLERATE * mProc->mSampleRate;
+			int stepsPerOscillation = std::max(1, (int) ((1.f-mProc->mSampleRate) * getSampleRate()));
+
+			double resampleSteps = 0;
+
+			resampleSteps = 1.f / stepsPerOscillation;
+
+
 			ADSRTable *table = &mProc->mADSRTables[2];
 			while (--cnt >= 0)
 			{

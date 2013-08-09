@@ -20,7 +20,7 @@
 #define NOTEDECLICK 0.005f
 #define WINDOWWIDTH 720
 #define WINDOWHEIGHT 520
-#define MAXSAMPLERATE 0.5
+#define MAXSAMPLERATE 512.0f
 
 #define LASTRADIOACTION Action::UserFunc
 
