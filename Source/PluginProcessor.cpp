@@ -42,7 +42,9 @@ public:
 		mReleased (false),
 		mDone(true),
 		mDeclickPreviousNote(false),
-		mProc(proc)
+		mProc(proc),
+		mFilter(),
+		mCoeff()
 {
 
 }
@@ -73,9 +75,9 @@ public:
 
 		mCyclesPerSecond = MidiMessage::getMidiNoteInHertz (midiNoteNumber);
 		mTimeDelta = 1 / getSampleRate();
-		mCoeff.makeLowPass(getSampleRate(), 400);
+		mCoeff.makeLowPass(getSampleRate(), 4000);
 		mFilter.setCoefficients(mCoeff);
-		mFilter.reset();
+		//mFilter.reset();
 	}
 
 	void stopNote (const bool allowTailOff)
@@ -164,10 +166,13 @@ public:
 					}
 				}
 
+				float tmp = currentSample;
+				//mFilter.processSamples(&tmp, 1);
+
 				for (int i = outputBuffer.getNumChannels(); --i >= 0;)
 				{
 					float *ptr = outputBuffer.getSampleData (i, startSample);
-					*ptr += currentSample;
+					*ptr += tmp;
 					if (mDeclickPreviousNote && i < (int) mLastLevels.size())
 					{
 						 *ptr += (float) (mLastLevels[i] * std::max(0., ((NOTEDECLICK-mCurrentTime)/NOTEDECLICK)));
@@ -176,8 +181,6 @@ public:
 				
 				++startSample;
 			}
-			
-			//mFilter.processSamples(outputBuffer.getSampleData(0), outputBuffer.getNumSamples());
 		}
 	}
 
