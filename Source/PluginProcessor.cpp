@@ -75,7 +75,7 @@ public:
 
 		mCyclesPerSecond = MidiMessage::getMidiNoteInHertz (midiNoteNumber);
 		mTimeDelta = 1 / getSampleRate();
-		mCoeff.makeLowPass(getSampleRate(), 4000);
+		mCoeff = mCoeff.makeLowShelf(getSampleRate(), 1000, 4, 1.2);
 		mFilter.setCoefficients(mCoeff);
 		//mFilter.reset();
 	}
@@ -167,7 +167,7 @@ public:
 				}
 
 				float tmp = currentSample;
-				//mFilter.processSamples(&tmp, 1);
+				mFilter.processSamples(&tmp, 1);
 
 				for (int i = outputBuffer.getNumChannels(); --i >= 0;)
 				{
@@ -315,7 +315,7 @@ int SimpleMorphSynth::getNumParameters()
 float SimpleMorphSynth::getParameter (int index)
 {
 	int target = 0;
-	if (index >= LastParam)
+	if (index >= NumParams)
 	{
 		index = index - SYNTHPARAMS;
 		target++;
@@ -343,7 +343,7 @@ float SimpleMorphSynth::getParameter (int index)
 const String SimpleMorphSynth::getParameterName (int index)
 {
 	int target = 0;
-	if (index >= LastParam)
+	if (index >= NumParams)
 	{
 		index = index - SYNTHPARAMS;
 		target++;
@@ -360,6 +360,7 @@ const String SimpleMorphSynth::getParameterName (int index)
 		case AmpDecayParam:				return "AmpDecayParam";
 		case AmpReleaseParam:			return "AmpReleaseParam";
 		case AmpSustainParam:			return "AmpSustainParam";
+		case FilterFrequencyParam:		return "FilterFrequencyParam";
 		case AdjustPhaseParam:			return juce::String("AdjustOSCPhase") + tOsc;
 		case SynthAmpParam:				return juce::String("SynthAmpParam") + tOsc;
 		case SynthAttackParam:			return juce::String("SynthAttackParam") + tOsc;
@@ -375,7 +376,7 @@ const String SimpleMorphSynth::getParameterName (int index)
 const String SimpleMorphSynth::getShortParameterName (int index)
 {
 	int target = 0;
-	if (index >= LastParam)
+	if (index >= NumParams)
 	{
 		index = index - SYNTHPARAMS;
 		target++;
@@ -393,6 +394,7 @@ const String SimpleMorphSynth::getShortParameterName (int index)
 		case AmpReleaseParam:			return "REL";
 		case AmpSustainParam:			return "SUS";
 		case AdjustPhaseParam:			return "PHASE";
+		case FilterFrequencyParam:		return "FFREQ";
 		case SynthAmpParam:				return juce::String("AMP") + tOsc;
 		case SynthAttackParam:			return juce::String("ATK") + tOsc;
 		case SynthDecayParam:			return juce::String("DCY") + tOsc;
@@ -409,7 +411,7 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 {
 	mUpdateEditor = true;
 	int target = 0;
-	if (index >= LastParam)
+	if (index >= NumParams)
 	{
 		index = index - SYNTHPARAMS;
 		target++;
@@ -428,6 +430,7 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 		case AmpSustainParam:			mADSRTables[2].mSustain = newValue; break;
 		case AmpDecayParam:				mADSRTables[2].mDecay = newValue; break;
 		case AmpReleaseParam:			mADSRTables[2].mRelease = std::max(newValue, DECLICK); break;
+		case FilterFrequencyParam:		mFilterFrequency = newValue;
 		case SynthAmpParam:				mAmplifiers[target].mAmp = newValue; break;
 		case AdjustPhaseParam:			mWaveTables[target].executeAction(AdjustPhase, newValue); break;
 		case SynthAttackParam:			mADSRTables[target].mAttack = std::max(newValue, DECLICK); break;
@@ -556,6 +559,7 @@ void SimpleMorphSynth::getStateInformation (MemoryBlock& destData)
 	xml.setAttribute("smoothrange", mSmoothRangeFactor);
 	xml.setAttribute("smoothjagged", mSmoothJaggedFactor);
 	xml.setAttribute("bits", mSampleRate); 
+	xml.setAttribute("filterfreq", mFilterFrequency);
 
 	for (size_t w = 0; w < NUMOSC; w++) 
 	{
@@ -601,6 +605,7 @@ void SimpleMorphSynth::setStateInformation (const void* data, int sizeInBytes)
 			mSmoothRangeFactor  = (float) xmlState->getDoubleAttribute ("smoothrange", 0.0);
 			mSmoothJaggedFactor = (float) xmlState->getDoubleAttribute("smoothjagged", 0.0);
 			mSampleRate = (float) xmlState->getDoubleAttribute("bits", 0.0);
+			mFilterFrequency = (float)xmlState->getDoubleAttribute("filterfreq", 0.0);
 			for (size_t w = 0; w < NUMOSC; w++) 
 			{
 				for (size_t i = 0; i < WAVESIZE; i++)
