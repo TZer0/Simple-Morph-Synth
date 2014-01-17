@@ -44,9 +44,12 @@ public:
 		mDeclickPreviousNote(false),
 		mProc(proc),
 		mFilter(),
-		mCoeff()
+		mResFilter(),
+		mNoteNumber(0)
 {
-
+		mFilter.reset();
+		mResFilter.reset();
+		updateFilter(60);
 }
 
 	bool canPlaySound (SynthesiserSound* sound)
@@ -75,9 +78,31 @@ public:
 
 		mCyclesPerSecond = MidiMessage::getMidiNoteInHertz (midiNoteNumber);
 		mTimeDelta = 1 / getSampleRate();
-		mCoeff = mCoeff.makeLowShelf(getSampleRate(), 1000, 4, 1.2);
-		mFilter.setCoefficients(mCoeff);
+		
+		updateFilter(midiNoteNumber);
+
 		//mFilter.reset();
+	}
+
+	void updateFilter(int playedNote) {
+		mNoteNumber = playedNote;
+		updateFilter();
+	}
+
+	void updateFilter() {
+		float filterSemi = mNoteNumber +  (mProc->mFilterFrequency - 0.5) * 30;
+		int roundFilterSemi = (int)filterSemi;
+		float diff = filterSemi - roundFilterSemi;
+		float freq = MidiMessage::getMidiNoteInHertz(roundFilterSemi) * (1 - diff)
+			+ MidiMessage::getMidiNoteInHertz(roundFilterSemi + 1) * diff;
+
+		IIRCoefficients coeff;
+
+		coeff = coeff.makeLowPass(getSampleRate(), freq);
+		mFilter.setCoefficients(coeff);
+
+		coeff = coeff.makePeakFilter(getSampleRate(), freq, mProc->mResQ, mProc->mResGain);
+		mResFilter.setCoefficients(coeff);
 	}
 
 	void stopNote (const bool allowTailOff)
@@ -167,7 +192,9 @@ public:
 				}
 
 				float tmp = currentSample;
+				updateFilter();
 				mFilter.processSamples(&tmp, 1);
+				mResFilter.processSamples(&tmp, 1);
 
 				for (int i = outputBuffer.getNumChannels(); --i >= 0;)
 				{
@@ -186,10 +213,10 @@ public:
 
 private:
 	double mCurrentTime, mTimeDelta, mLevel, mCyclesPerSecond, mReleaseTime, mResampleTime;
+	int mNoteNumber;
 	std::vector<float> mLastLevels;
 	bool mReleased, mDone, mDeclickPreviousNote;
-	IIRFilter mFilter;
-	IIRCoefficients mCoeff;
+	IIRFilter mFilter, mResFilter;
 	SimpleMorphSynth *mProc;
 };
 
@@ -224,7 +251,9 @@ private:
 		}
 	}
 
-
+	mFilterFrequency = 0;
+	mResQ = 1;
+	mResGain = 1;
 	
 	mVoiceFactor = 0.25;
 	adjustVoices();
@@ -328,6 +357,7 @@ float SimpleMorphSynth::getParameter (int index)
 		case SmoothJaggedParam:			return mSmoothJaggedFactor;
 		case AdjustVoices:				return mVoiceFactor;
 		case AdjustSampleRate:			return mSampleRate;
+		case FilterFrequencyParam:		return mFilterFrequency;
 		case AmpAttackParam:			return mADSRTables[2].mAttack;
 		case AmpSustainParam:			return mADSRTables[2].mSustain;
 		case AmpDecayParam:				return mADSRTables[2].mDecay;
@@ -430,7 +460,7 @@ void SimpleMorphSynth::setParameter (int index, float newValue)
 		case AmpSustainParam:			mADSRTables[2].mSustain = newValue; break;
 		case AmpDecayParam:				mADSRTables[2].mDecay = newValue; break;
 		case AmpReleaseParam:			mADSRTables[2].mRelease = std::max(newValue, DECLICK); break;
-		case FilterFrequencyParam:		mFilterFrequency = newValue;
+		case FilterFrequencyParam:		mFilterFrequency = newValue; break;
 		case SynthAmpParam:				mAmplifiers[target].mAmp = newValue; break;
 		case AdjustPhaseParam:			mWaveTables[target].executeAction(AdjustPhase, newValue); break;
 		case SynthAttackParam:			mADSRTables[target].mAttack = std::max(newValue, DECLICK); break;

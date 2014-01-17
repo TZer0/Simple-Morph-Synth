@@ -38,6 +38,8 @@
 				(int) OSCBOXHEIGHT), juce::Point<int>(PHASESLIDERWIDTH, 20), 0, 1, 0, juce::Slider::SliderStyle::LinearHorizontal);
 	addSlider(AdjustPhaseParam, OscPoints[1].toInt() + juce::Point<int>((int) (OSCBOXWIDTH/2-PHASESLIDERWIDTH/2), 
 				(int) OSCBOXHEIGHT), juce::Point<int>(PHASESLIDERWIDTH, 20), 0, 1, 1, juce::Slider::SliderStyle::LinearHorizontal);
+	addSlider(FilterFrequencyParam, juce::Point<int>(500, 350), juce::Point<int>(50, 50), 0, 1, 0,
+		juce::Slider::SliderStyle::RotaryHorizontalVerticalDrag);
 
 	for (int i = AmpAttackParam; i <= AmpReleaseParam; i++)
 	{

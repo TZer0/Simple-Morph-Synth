@@ -38,9 +38,9 @@ enum Action
 	AdjustPhase,
 };
 
-#define LASTCOMMONPARAM AdjustSampleRate
+#define LASTCOMMONPARAM FilterFrequencyParam
 #define LASTSYNTHPARAM SynthSustainParam
-#define TOTALNUMPARAMS (NumParams-LASTCOMMONPARAM+LASTSYNTHPARAM)
+#define TOTALNUMPARAMS (2 * NumParams - LASTCOMMONPARAM - 1)
 #define SYNTHPARAMS (LASTSYNTHPARAM-LASTCOMMONPARAM)
 
 enum Parameter
@@ -248,7 +248,6 @@ public:
 	SimpleMorphSynth();
 	~SimpleMorphSynth();
 
-	IIRFilter mFilter;
 
 	//==============================================================================
 	void prepareToPlay (double sampleRate, int samplesPerBlock);
@@ -322,7 +321,8 @@ public:
 	WaveTable mWaveTables[NUMOSC];
 	ADSRTable mADSRTables[NUMDEVINST];
 	Amplifier mAmplifiers[NUMDEVINST];
-	float mSmoothStrengthFactor, mSmoothRangeFactor, mSmoothJaggedFactor, mVoiceFactor, mSampleRate, mFilterFrequency;
+	float mSmoothStrengthFactor, mSmoothRangeFactor, mSmoothJaggedFactor, mVoiceFactor, mSampleRate, mFilterFrequency,
+		mResQ, mResGain;
 	Synthesiser mSynth;
 
 
